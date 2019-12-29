@@ -1,0 +1,22 @@
+### folders
+.idea
+.rpt2_cache
+node_modules
+logs
+dist/*
+
+### matching
+*.log
+*.tgz
+*.ipr
+*.iws
+*.iml
+
+### files
+package-lock.json
+atlassian-ide-plugin.xml
+local-config.json
+
+### inverse
+!dist/.gitkeep
+!dist/README.md

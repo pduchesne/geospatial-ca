@@ -4,11 +4,11 @@ import { BrowserRouter, Route } from 'react-router-dom';
 import { Map, View, ImageCanvas, ImageBase } from 'ol';
 import 'ol/ol.css';
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { TranslateAutomata, ImageDataLattice, Environment } from 'ca';
+import { TranslateAutomata, ImageDataLattice, Environment, AverageAutomata } from 'ca';
 import * as control from 'ol/control/Control';
 import OSM from 'ol/source/OSM';
 import * as raster from 'ol/source/Raster';
-import ImageStatic from 'ol/source/ImageStatic';
+//import ImageStatic from 'ol/source/ImageStatic';
 import * as layer from 'ol/layer';
 import * as extent from 'ol/extent';
 import { ViewOptions } from 'ol/View';
@@ -93,8 +93,11 @@ export class SpatialEnvironment extends Environment<ImageDataLattice, ImageDataL
     constructor(image: ImageData, extent: extent.Extent) {
         super(
             new ImageDataLattice(image), 
-            new ImageDataLattice(new ImageData(image.width, image.height)),
-            new TranslateAutomata());
+            new ImageDataLattice(image), // init env with basemap as state
+            //new TranslateAutomata(10)
+            new AverageAutomata(1)
+            );
+
 
         this.extent = extent;
     }
@@ -198,7 +201,7 @@ export class CellularAutomataSource extends ImageCanvasSource {
             this.caEnv = new Environment<ImageDataLattice, ImageDataLattice>(
                 lattice,  
                 new ImageDataLattice(new ImageData(lattice.getWidth(), lattice.getHeight())), 
-                new TranslateAutomata() );
+                new TranslateAutomata(10) );
           } else {
             this.caEnv = undefined;
           }
@@ -207,6 +210,7 @@ export class CellularAutomataSource extends ImageCanvasSource {
     getEnv() {
         return this.caEnv;
     }
+
 }
 
 export const MyMap = () => {
@@ -259,7 +263,7 @@ export const MyMap = () => {
               source: imagesContainer,
               opacity: 0.5
             }),
-            
+            /*
             new layer.Image({
                 source: new ImageStatic({
                   attributions: '© <a href="http://xkcd.com/license.html">xkcd</a>',
@@ -268,6 +272,7 @@ export const MyMap = () => {
                   imageExtent: [-180,-90,180,90]
                 })
               }),
+              */
               
               new layer.Image({
                 source: caImageSource

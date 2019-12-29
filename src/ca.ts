@@ -2,45 +2,92 @@ export class Cell {
 
 }
 
-export type Automata<I , O> = {
-   step: (inputs: I, outputs: O) => void; 
+export type Automata<I extends Lattice2D, O extends Lattice2D> = {
+   step: (baseLattice: I, currentState: O) => O; 
 }
 
-export class TranslateAutomata implements Automata<Lattice2D, Lattice2D> {
-    step(lattice: Lattice2D, outputLattice: Lattice2D) {
 
-        for (let y=0;y<lattice.getHeight();y++) {
-            for (let x=0;x<lattice.getWidth();x++) {
-                const outputCell = x >= 50 ? lattice.get(x-50, y) : lattice.get(0, y);
-                outputLattice.set(x,y,outputCell);
+export abstract class FullRangeAutomata<I extends Lattice2D, O extends Lattice2D> implements Automata<I, O> {
+
+    step(baseLattice: I, stateLattice: O) {
+
+        const newState = stateLattice.cloneEmpty() as O;
+        for (let y=0;y<newState.getHeight();y++) {
+            for (let x=0;x<newState.getWidth();x++) {
+                
+                newState.set(x,y, this.processCell(x, y, stateLattice));
             }
         }
 
-        console.log('CA done');
+        return newState;
+    }
+
+    abstract processCell(x: number, y:number, stateLattice: O) : any;
+    
+} 
+
+export class TranslateAutomata<I extends Lattice2D, O extends Lattice2D> extends FullRangeAutomata<I, O> {
+    private offset: number;
+
+    constructor(offset: number) {
+        super();
+        this.offset = offset;
+    }
+
+    processCell(x: number, y:number, stateLattice: O) {
+        return x >= this.offset ? stateLattice.get(x-this.offset, y) : stateLattice.get(0, y);
     }
     
 } 
 
-export class Environment<INLATTICE, OUTLATTICE> {
+export class AverageAutomata<I extends Lattice2D<Pixel>, O extends Lattice2D<Pixel>> extends FullRangeAutomata<I, O> {
+    private range: number;
 
-    private input: INLATTICE;
+    constructor(range: number) {
+        super();
+        this.range = range;
+    }
 
-    private output: OUTLATTICE;
+    processCell(x: number, y:number, stateLattice: O) {
+        const newCell = [0,0,0,0] as Pixel;
 
-    private automata: Automata<INLATTICE , OUTLATTICE>;
+        for (let dy=-this.range;dy<=this.range;dy++) {
+            for (let dx=-this.range;dx<=this.range;dx++) {
+                if (x+dx >= 0 && y+dy >= 0 && x+dx < stateLattice.getWidth() && y+dy < stateLattice.getHeight()) {
+                    const pixel = stateLattice.get(x+dx, y+dy);
+                    [0,1,2,3].forEach( (idx) => newCell[idx] += pixel[idx]);
+                }
+            }
+        }
+        const cellNb = Math.pow(1+2*this.range,2);
 
-    constructor(input: INLATTICE, output: OUTLATTICE, automata: Automata<INLATTICE , OUTLATTICE>) {
-        this.input = input;
-        this.output = output;
+        [0,1,2,3].forEach( (idx) => newCell[idx] = newCell[idx]/cellNb);
+
+        return newCell;
+    }
+    
+} 
+
+export class Environment<BASELATTICE extends Lattice2D, STATELATTICE extends Lattice2D> {
+
+    private base: BASELATTICE;
+
+    private currentState: STATELATTICE;
+
+    private automata: Automata<BASELATTICE , STATELATTICE>;
+
+    constructor(input: BASELATTICE, output: STATELATTICE, automata: Automata<BASELATTICE , STATELATTICE>) {
+        this.base = input;
+        this.currentState = output;
         this.automata = automata;
     }
 
     applyAutomata() {
-        this.automata.step(this.input, this.output);
+        this.currentState = this.automata.step(this.base, this.currentState);
     }
 
     getOutput() {
-        return this.output;
+        return this.currentState;
     }
 }
 
@@ -52,6 +99,8 @@ export interface Lattice2D<C = any> {
     getWidth(): number;
 
     getHeight(): number;
+
+    cloneEmpty(): Lattice2D<C>;
 }
 
 export class CellLattice2D implements Lattice2D<Cell> {
@@ -64,7 +113,7 @@ export class CellLattice2D implements Lattice2D<Cell> {
 
     private cells: Cell[][];
 
-    Lattice2D(width: number, height: number) {
+    constructor(width: number, height: number) {
         this.cells = new Cell[width][height]
     }
 
@@ -74,6 +123,10 @@ export class CellLattice2D implements Lattice2D<Cell> {
 
     set(x: number, y: number, value: Cell) {
         this.cells[y][x] = value;
+    }
+
+    cloneEmpty() {
+        return new CellLattice2D(this.getWidth(), this.getHeight());
     }
 }
 
@@ -110,6 +163,10 @@ export class ImageDataLattice implements Lattice2D<Pixel> {
 
     getData() {
         return this.data;
+    }
+
+    cloneEmpty() {
+        return new ImageDataLattice(new ImageData(this.getWidth(), this.getHeight()));
     }
     
 }

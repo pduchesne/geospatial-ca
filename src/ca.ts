@@ -10,19 +10,10 @@ export type Automata<I extends Lattice2D, O extends Lattice2D> = {
 export abstract class FullRangeAutomata<I extends Lattice2D, O extends Lattice2D> implements Automata<I, O> {
 
     step(baseLattice: I, stateLattice: O) {
-
-        const newState = stateLattice.cloneEmpty() as O;
-        for (let y=0;y<newState.getHeight();y++) {
-            for (let x=0;x<newState.getWidth();x++) {
-                
-                newState.set(x,y, this.processCell(x, y, stateLattice));
-            }
-        }
-
-        return newState;
+        return mapInto(stateLattice, () => stateLattice.newInstance(), (x,y,stateLattice) => this.processCell(x,y,stateLattice, baseLattice) ) as O;
     }
 
-    abstract processCell(x: number, y:number, stateLattice: O) : any;
+    abstract processCell(x: number, y:number, stateLattice: O, baseLattice?: I) : any;
     
 } 
 
@@ -65,7 +56,6 @@ export class AverageAutomata<I extends Lattice2D<Pixel>, O extends Lattice2D<Pix
 
         return newCell;
     }
-    
 } 
 
 export class Environment<BASELATTICE extends Lattice2D, STATELATTICE extends Lattice2D> {
@@ -89,6 +79,10 @@ export class Environment<BASELATTICE extends Lattice2D, STATELATTICE extends Lat
     getOutput() {
         return this.currentState;
     }
+
+    getBase() {
+        return this.base;
+    }
 }
 
 export interface Lattice2D<C = any> {
@@ -100,10 +94,26 @@ export interface Lattice2D<C = any> {
 
     getHeight(): number;
 
-    cloneEmpty(): Lattice2D<C>;
+    newInstance(width?: number, height?: number): Lattice2D<C>;
 }
 
-export class CellLattice2D implements Lattice2D<Cell> {
+export function mapInto<SOURCE extends Lattice2D<SOURCECELL>, SOURCECELL, TARGET extends Lattice2D<TARGETCELL>, TARGETCELL>
+    (source: SOURCE,
+     latticeCons: (width: number, height: number) => TARGET, 
+     mapFn:  (x: number, y:number, source: SOURCE) => TARGETCELL ): TARGET {
+    const newLattice = latticeCons(source.getWidth(), source.getHeight());
+    
+    for (let y=0;y<newLattice.getHeight();y++) {
+        for (let x=0;x<newLattice.getWidth();x++) {
+            
+         newLattice.set(x,y, mapFn(x, y, source));
+        }
+    }
+
+    return newLattice;
+ }
+
+export class CellLattice2D<CELLTYPE> implements Lattice2D<CELLTYPE> {
     getWidth(): number {
         return this.cells[0].length;
     }
@@ -111,22 +121,37 @@ export class CellLattice2D implements Lattice2D<Cell> {
         return this.cells.length;
     }
 
-    private cells: Cell[][];
+    private cells: CELLTYPE[][];
 
-    constructor(width: number, height: number) {
-        this.cells = new Cell[width][height]
+    constructor(width: number, height: number, initCellFn?: (x: number, y: number) => CELLTYPE) {
+        this.cells = new Array(height).fill(undefined);
+        this.cells.forEach( (value, idx, arr) => arr[idx] = new Array(width) );
+
+        if (initCellFn) {
+            this.forEach( (cell, x, y, _this) => { _this.set(x, y, initCellFn(x, y)) } );
+        }
     }
 
-    get(x: number, y: number): Cell {
+    get(x: number, y: number): CELLTYPE {
         return this.cells[y][x];
     }
 
-    set(x: number, y: number, value: Cell) {
+    set(x: number, y: number, value: CELLTYPE) {
         this.cells[y][x] = value;
     }
 
-    cloneEmpty() {
-        return new CellLattice2D(this.getWidth(), this.getHeight());
+    newInstance(width?: number, height?: number, initCellFn?: (x: number, y: number) => CELLTYPE) {
+        const newLattice = new CellLattice2D<CELLTYPE>(width == undefined ? this.getWidth(): width, height == undefined ? this.getHeight() : height);
+
+        return newLattice;
+    }
+
+    forEach(forEachFn: (cell: CELLTYPE, x: number, y: number, _this: Lattice2D<CELLTYPE>) => void) {
+        for (let y=0;y<this.getHeight();y++) {
+            for (let x=0;x<this.getWidth();x++) {
+                forEachFn(this.get(x, y), x, y, this);
+            }
+        }  
     }
 }
 
@@ -141,7 +166,7 @@ export class ImageDataLattice implements Lattice2D<Pixel> {
     }
 
     private data:ImageData;
-    
+
     constructor(data: ImageData) {
         this.data = data;
     }
@@ -165,8 +190,24 @@ export class ImageDataLattice implements Lattice2D<Pixel> {
         return this.data;
     }
 
-    cloneEmpty() {
-        return new ImageDataLattice(new ImageData(this.getWidth(), this.getHeight()));
+    newInstance(width?: number, height?: number) {
+        return new ImageDataLattice(new ImageData(width == undefined ? this.getWidth(): width, height == undefined ? this.getHeight() : height));
+    }
+
+    forEach(forEachFn: (cell: Pixel, x: number, y: number, _this: ImageDataLattice) => void) {
+        for (let y=0;y<this.getHeight();y++) {
+            for (let x=0;x<this.getWidth();x++) {
+                forEachFn(this.get(x, y), x, y, this);
+            }
+        }  
+    }
+
+    static fromLattice<SOURCECELLTYPE>(sourceLattice: Lattice2D<SOURCECELLTYPE>, mapFn: (x: number, y: number, cell: SOURCECELLTYPE) => Pixel) {
+        const newImageLattice = new ImageDataLattice(new ImageData(sourceLattice.getWidth(), sourceLattice.getHeight()));
+
+        newImageLattice.forEach( (cell, x, y, _this) => _this.set(x, y, mapFn(x, y, sourceLattice.get(x, y))) );
+
+        return newImageLattice;
     }
     
 }

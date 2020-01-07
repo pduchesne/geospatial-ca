@@ -73,7 +73,7 @@ module.exports = {
     devServer: {
         contentBase: path.join(__dirname, 'dist'),
         compress: true,
-        port: 3000,
+        port: 4000,
         // needed to properly support BrowsrRouter
         // see https://stackoverflow.com/questions/43209666/react-router-v4-cannot-get-url
         historyApiFallback: true

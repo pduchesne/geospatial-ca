@@ -4,7 +4,15 @@ import { BrowserRouter, Route } from 'react-router-dom';
 import { Map, View, ImageCanvas, ImageBase } from 'ol';
 import 'ol/ol.css';
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { TranslateAutomata, ImageDataLattice, Environment, AverageAutomata, CellLattice2D, FullRangeAutomata, Lattice2D } from 'ca';
+import {
+    TranslateAutomata,
+    ImageDataLattice,
+    Environment,
+    AverageAutomata,
+    CellLattice2D,
+    FullRangeAutomata,
+    Lattice2D,
+} from 'ca';
 import OSM from 'ol/source/OSM';
 import * as raster from 'ol/source/Raster';
 //import ImageStatic from 'ol/source/ImageStatic';
@@ -18,6 +26,7 @@ import Projection from 'ol/proj/Projection';
 import { getHeight } from 'ol/extent';
 import { rgbToHsl } from 'color-utils';
 import {ReactControl, LayerList} from "./ol-helpers";
+import {Coordinate} from "ol/coordinate";
 //import Event from 'ol/events/Event';
 //import EventType from 'ol/events/EventType';
 
@@ -106,7 +115,7 @@ export class TerrainLattice extends CellLattice2D<TerrainCell> {
     static initTerrainCellValues(x: number, y:number, demLattice: ImageDataLattice): TerrainCell {
 
         const currentCell = demLattice.get(x,y);
-        const altitude = 255-rgbToHsl(currentCell)[0];
+        const altitude = 255*(1-rgbToHsl(currentCell)[0]);
 
         return {
             altitude,
@@ -314,6 +323,17 @@ export class CellularAutomataSource2 extends ImageSource {
             }
         }
     }
+
+    getCellAt(coords: Coordinate): TerrainCell | undefined {
+        if (this.caEnv) {
+            const cellX = (this.caEnv.getBase().getWidth())*(coords[0]-this.caEnv.getExtent()[0])/(this.caEnv.getExtent()[2]-this.caEnv.getExtent()[0]);
+            const cellY = (this.caEnv.getBase().getHeight())*(-coords[1]+this.caEnv.getExtent()[3])/(this.caEnv.getExtent()[3]-this.caEnv.getExtent()[1]);
+            return this.getEnv()?.getBase().get(Math.round(cellX), Math.round(cellY));
+        } else {
+            return undefined;
+        }
+
+    }
 }
 
 
@@ -369,6 +389,7 @@ export const MyMap = () => {
     const [viewOptions, setViewOptions] = useState<ViewOptions>();
 
     const mapDiv = useRef<HTMLDivElement>(null);
+    const [selectedCell, setSelectedCell] = useState<TerrainCell>();
 
     useEffect( () => {
         setViewOptions( { center: [0, 0], zoom: 1 } );
@@ -418,22 +439,22 @@ export const MyMap = () => {
                         source: imagesContainer,
                         opacity: 0.5
                     }),
-                    /*
-                    new layer.Image({
-                        source: new ImageStatic({
-                          attributions: '© <a href="http://xkcd.com/license.html">xkcd</a>',
-                          url: 'https://imgs.xkcd.com/comics/online_communities.png',
-                          projection: 'EPSG:4326',
-                          imageExtent: [-180,-90,180,90]
-                        })
-                      }),
-                      */
-
                     new layer.Image({
                         source: caImageSource
                     })
                 ],
                 view: new View(viewOptions)
+            });
+
+            map.on('singleclick', function (evt) {
+                map.forEachLayerAtPixel(evt.pixel, function(layer) {
+                    const targetSource = layer.getSource();
+                    if (caImageSource == targetSource) {
+                        const xy1 = evt.coordinate;
+                        const cell = caImageSource.getCellAt(xy1);
+                        setSelectedCell(cell);
+                    }
+                });
             });
 
             return map;
@@ -451,10 +472,16 @@ export const MyMap = () => {
         <button onMouseUp={() => caImageSource.setInputImages(imagesContainer.getImages(), olmap.getView().calculateExtent())}>SNAPSHOT</button>>
         <button onMouseUp={() => stepAutomata(1)}>STEP</button>>
         <button onMouseUp={() => stepAutomata(50)}>STEP50</button>>
-        <div style={{height: '400px'}} ref={mapDiv}/>
-        <ReactControl map={olmap}>
-            <LayerList map={olmap}/>
-        </ReactControl>
+
+        <div style={{width: '60%'}}>
+            <div style={{height: '400px'}} ref={mapDiv}/>
+            <ReactControl map={olmap}>
+                <LayerList map={olmap}/>
+            </ReactControl>
+        </div>
+        <div style={{width: '40%'}}>
+            {JSON.stringify(selectedCell)}
+        </div>
     </div>
 }
 

@@ -127,7 +127,9 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     static computeDiffusionMatrix(x: number, y: number, terrainLattice: TerrainLattice) {
         const currentCell = terrainLattice.get(x,y);
 
-        let totalOutboundFactor = 0, totalLeveled = 0;
+        let totalOutboundFactor = 0;
+
+        const transferFactors = [[NaN,NaN,NaN], [NaN, NaN, NaN], [NaN, NaN, NaN]];
 
         for (let dy=-1;dy<=1;dy++) {
             for (let dx=-1;dx<=1;dx++) {
@@ -140,21 +142,19 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
                     // a function that originates at [0,0] and raises asymptotically to 1
                     // see http://fooplot.com/#W3sidHlwZSI6MCwiZXEiOiIxLTEvKHgrMSleMyIsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6MTAwMCwid2luZG93IjpbIi0wLjUiLCIzIiwiLTQiLCI0Il19XQ--
                     //     http://fooplot.com/#W3sidHlwZSI6MCwiZXEiOiJhdGFuKDYqeCkvMS41NyIsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6MTAwMCwid2luZG93IjpbIi0xLjgyMTExNTM4NDYxNTM4MTEiLCIxLjY3ODg4NDYxNTM4NDYxMzUiLCItMS41OTk5OTk5OTk5OTk5OTk0IiwiMS41OTk5OTk5OTk5OTk5OTk0Il19XQ--
-                    // transferFactor > 1 when water comes in (inbound)
-                    const transferFactor =  Math.atan(10 * slope) / (Math.PI/2) // 1-1/Math.pow(slope+1, 3);
+                    // transferFactor > 0 when water comes in (inbound)
+                    let transferFactor =  Math.atan(10 * slope) / (Math.PI/2) // 1-1/Math.pow(slope+1, 3);
 
-                    if (transferFactor > 0 ) {
-                        // incoming water
-
-                        // nothing to do; diffusion factor will be set when processing source cell
-                    } else if (transferFactor < 0) {
-                        // outgoing water
-                        totalOutboundFactor += transferFactor;
-                        currentCell.diffusionMatrix[dx+1][dy+1] = transferFactor;
-                    } else {
-                        totalLeveled ++;
+                    if (transferFactor == 0) {
+                        transferFactor = -0.1; // equal altitude cells default to 0.1 transfer : major if all neighbours at same altitude, marginal if neighbours lower
                     }
 
+                    if (transferFactor < 0) {
+                        // outgoing water
+                        totalOutboundFactor += transferFactor;
+                    }
+
+                    transferFactors[dy+1][dx+1] = transferFactor;
                 }
             }
         }
@@ -162,13 +162,16 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
         for (let dy=-1;dy<=1;dy++) {
             for (let dx=-1;dx<=1;dx++) {
 
-                if (currentCell.diffusionMatrix[dx+1][dy+1] > 0 || Number.isNaN(currentCell.diffusionMatrix[dx+1][dy+1]) ) {
-                    // factor is not set or has been set from the source cell
-                } else if (currentCell.diffusionMatrix[dx+1][dy+1] < 0) {
-                    currentCell.diffusionMatrix[dx+1][dy+1] = totalOutboundFactor && currentCell.diffusionMatrix[dx+1][dy+1]/-totalOutboundFactor;
-                    terrainLattice.get(x+dx,y+dy).diffusionMatrix[-dx+1][-dy+1] = -currentCell.diffusionMatrix[dx+1][dy+1];
+                if (transferFactors[dy+1][dx+1] > 0 ) {
+                    // factor will be set by the source cell
+                } else if (transferFactors[dy+1][dx+1] < 0) {
+                    // outbound water
+                    // normalize outbound factors with totalOutboundFactor if totalOutboundFactor > 1
+                    currentCell.diffusionMatrix[dy+1][dx+1] = transferFactors[dy+1][dx+1]/Math.max(-totalOutboundFactor, 1);
+                    // set the diffusion factor of the target cell 
+                    terrainLattice.get(x+dx,y+dy).diffusionMatrix[-dy+1][-dx+1] = -currentCell.diffusionMatrix[dy+1][dx+1];
                 } else {
-                    terrainLattice.get(x+dx,y+dy).diffusionMatrix[-dx+1][-dy+1] = (1 - totalOutboundFactor) / (2 * totalLeveled);
+                    // neighbour out of lattice
                 }
             }
         }
@@ -193,14 +196,16 @@ export class WaterflowAutomata extends FullRangeAutomata<Lattice2D<TerrainCellSt
                     const fromBase = baseLattice.get(x+dx, y+dy);
 
                     // heightDiff > 0 means this cell has absolute higher water level than neighbour
-                    const heightDiff = thisTerrainCell.altitude == fromBase.altitude ? 0 : thisTerrainCell.altitude + thisTerrainStateCell[1] - fromBase.altitude - fromState[1];
+                    const heightDiff = thisTerrainCell.altitude == fromBase.altitude ? 
+                        0 : 
+                        thisTerrainCell.altitude + thisTerrainStateCell[1] - fromBase.altitude - fromState[1];
 
-                    if (thisTerrainCell.diffusionMatrix[dx+1][dy+1] < 0) {
+                    if (thisTerrainCell.diffusionMatrix[dy+1][dx+1] < 0) {
                         // water leaving this cell
-                        water_outer_delta += heightDiff >= 0 ? thisTerrainCell.diffusionMatrix[dx+1][dy+1] * thisTerrainStateCell[1] : -heightDiff / 16;
-                    } else if (thisTerrainCell.diffusionMatrix[dx+1][dy+1] > 0) {
+                        water_outer_delta += heightDiff >= -5 ? thisTerrainCell.diffusionMatrix[dy+1][dx+1] * thisTerrainStateCell[1] : -heightDiff / 16;
+                    } else if (thisTerrainCell.diffusionMatrix[dy+1][dx+1] > 0) {
                         // water entering this cell --> take water level of emitting cell
-                        water_outer_delta += heightDiff <= 0 ? thisTerrainCell.diffusionMatrix[dx+1][dy+1] * fromState[1] : -heightDiff / 16;
+                        water_outer_delta += heightDiff <= 5 ? thisTerrainCell.diffusionMatrix[dy+1][dx+1] * fromState[1] : -heightDiff / 16;
                     } else {
 
                     }

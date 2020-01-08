@@ -1,6 +1,3 @@
-export class Cell {
-
-}
 
 export type Automata<I extends Lattice2D, O extends Lattice2D> = {
    step: (baseLattice: I, currentState: O) => O; 
@@ -94,6 +91,8 @@ export interface Lattice2D<C = any> {
 
     getHeight(): number;
 
+    //newState(): Lattice2D<C>;
+
     newInstance(width?: number, height?: number): Lattice2D<C>;
 }
 
@@ -113,7 +112,7 @@ export function mapInto<SOURCE extends Lattice2D<SOURCECELL>, SOURCECELL, TARGET
     return newLattice;
  }
 
-export class CellLattice2D<CELLTYPE> implements Lattice2D<CELLTYPE> {
+export class BaseLattice2D<CELLTYPE> implements Lattice2D<CELLTYPE> {
     getWidth(): number {
         return this.cells[0].length;
     }
@@ -141,7 +140,7 @@ export class CellLattice2D<CELLTYPE> implements Lattice2D<CELLTYPE> {
     }
 
     newInstance(width?: number, height?: number, initCellFn?: (x: number, y: number) => CELLTYPE) {
-        const newLattice = new CellLattice2D<CELLTYPE>(width == undefined ? this.getWidth(): width, height == undefined ? this.getHeight() : height);
+        const newLattice = new BaseLattice2D<CELLTYPE>(width == undefined ? this.getWidth(): width, height == undefined ? this.getHeight() : height);
 
         return newLattice;
     }
@@ -151,7 +150,7 @@ export class CellLattice2D<CELLTYPE> implements Lattice2D<CELLTYPE> {
             for (let x=0;x<this.getWidth();x++) {
                 forEachFn(this.get(x, y), x, y, this);
             }
-        }  
+        }
     }
 }
 

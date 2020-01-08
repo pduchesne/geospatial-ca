@@ -9,7 +9,7 @@ import {
     ImageDataLattice,
     Environment,
     AverageAutomata,
-    CellLattice2D,
+    BaseLattice2D,
     FullRangeAutomata,
     Lattice2D,
 } from 'ca';
@@ -85,12 +85,10 @@ export type TerrainCell = {
 
 }
 
-export type TerrainCellStatus = {
-    water_inner: number;
-    water_outer: number;
-}
+// array of [water_inner, water_outer]
+export type TerrainCellStatus = [number, number];
 
-export class TerrainLattice extends CellLattice2D<TerrainCell> {
+export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     static createFromImages(dem: ImageData, landuse?: ImageData) {
         const demLattice = new ImageDataLattice(dem);
         const newLattice = new TerrainLattice(demLattice.getWidth(), demLattice.getHeight());
@@ -192,14 +190,14 @@ export class WaterflowAutomata extends FullRangeAutomata<TerrainLattice, Lattice
                     const fromBase = baseLattice.get(x+dx, y+dy);
 
                     // heightDiff > 0 means this cell has absolute higher water level than neighbour
-                    const heightDiff = thisTerrainCell.altitude == fromBase.altitude ? 0 : thisTerrainCell.altitude + thisTerrainStateCell.water_outer - fromBase.altitude - fromState.water_outer;
+                    const heightDiff = thisTerrainCell.altitude == fromBase.altitude ? 0 : thisTerrainCell.altitude + thisTerrainStateCell[1] - fromBase.altitude - fromState[1];
 
                     if (thisTerrainCell.diffusionMatrix[dx+1][dy+1] < 0) {
                         // water leaving this cell
-                        water_outer_delta += heightDiff >= 0 ? thisTerrainCell.diffusionMatrix[dx+1][dy+1] * thisTerrainStateCell.water_outer : -heightDiff / 16;
+                        water_outer_delta += heightDiff >= 0 ? thisTerrainCell.diffusionMatrix[dx+1][dy+1] * thisTerrainStateCell[1] : -heightDiff / 16;
                     } else if (thisTerrainCell.diffusionMatrix[dx+1][dy+1] > 0) {
                         // water entering this cell --> take water level of emitting cell
-                        water_outer_delta += heightDiff <= 0 ? thisTerrainCell.diffusionMatrix[dx+1][dy+1] * fromState.water_outer : -heightDiff / 16;
+                        water_outer_delta += heightDiff <= 0 ? thisTerrainCell.diffusionMatrix[dx+1][dy+1] * fromState[1] : -heightDiff / 16;
                     } else {
 
                     }
@@ -207,7 +205,7 @@ export class WaterflowAutomata extends FullRangeAutomata<TerrainLattice, Lattice
             }
         }
 
-        return {water_inner: thisTerrainStateCell.water_inner + water_inner_delta, water_outer: thisTerrainStateCell.water_outer + water_outer_delta};
+        return [thisTerrainStateCell[0] + water_inner_delta, thisTerrainStateCell[1] + water_outer_delta];
     }
 }
 
@@ -218,7 +216,7 @@ export class TerrainEnvironment extends Environment<TerrainLattice, Lattice2D<Te
     constructor(image: ImageData, extent: extent.Extent) {
         super(
             TerrainLattice.createFromImages(image),
-            new CellLattice2D<TerrainCellStatus>(image.width, image.height, (x,y) => ({water_inner: 0, water_outer:  Math.random()>.9 ? 50 : 0})),
+            new BaseLattice2D<TerrainCellStatus>(image.width, image.height, (x, y) => ([0, Math.random()>.9 ? 50 : 0])),
             new WaterflowAutomata()
         );
 
@@ -233,7 +231,7 @@ export class TerrainEnvironment extends Environment<TerrainLattice, Lattice2D<Te
     renderOnCanvas() {
         const canvas: HTMLCanvasElement = document.createElement('canvas');
 
-        const imageLattice = ImageDataLattice.fromLattice(this.getOutput(), (x, y, cell) => [0,0,255,Math.min(1, cell.water_outer/10)*255]);
+        const imageLattice = ImageDataLattice.fromLattice(this.getOutput(), (x, y, cell) => [0,0,255,Math.min(1, cell[1]/10)*255]);
 
         canvas.setAttribute('width', this.getOutput().getWidth()+'px');
         canvas.setAttribute('height', this.getOutput().getHeight()+'px');

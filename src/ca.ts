@@ -1,20 +1,25 @@
 
-export type Automata<I extends Lattice2D, O extends Lattice2D> = {
-   step: (baseLattice: I, currentState: O) => O; 
+export type Automata<STATELATTICE extends Lattice2D<STATECELL>, BASELATTICE extends Lattice2D<BASECELL> | void, STATECELL = any, BASECELL = any> = {
+   step: (currentState: STATELATTICE, baseLattice: BASELATTICE) => STATELATTICE;
 }
 
 
-export abstract class FullRangeAutomata<I extends Lattice2D, O extends Lattice2D> implements Automata<I, O> {
+export abstract class FullRangeAutomata<STATELATTICE extends Lattice2D<STATECELL>, BASELATTICE extends Lattice2D<BASECELL> | void, STATECELL = any, BASECELL = any>
+    implements Automata<STATELATTICE, BASELATTICE> {
 
-    step(baseLattice: I, stateLattice: O) {
-        return mapInto(stateLattice, () => stateLattice.newInstance(), (x,y,stateLattice) => this.processCell(x,y,stateLattice, baseLattice) ) as O;
+    step(stateLattice: STATELATTICE, baseLattice: BASELATTICE) {
+        return mapInto(
+            stateLattice,
+            () => stateLattice.newInstance(),
+            (x,y,stateLattice) => this.processCell(x,y,stateLattice, baseLattice)
+        ) as STATELATTICE;
     }
 
-    abstract processCell(x: number, y:number, stateLattice: O, baseLattice?: I) : any;
+    abstract processCell(x: number, y:number, stateLattice: STATELATTICE, baseLattice?: BASELATTICE) : STATECELL;
     
 } 
 
-export class TranslateAutomata<I extends Lattice2D, O extends Lattice2D> extends FullRangeAutomata<I, O> {
+export class TranslateAutomata<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | void> extends FullRangeAutomata<STATELATTICE, BASELATTICE> {
     private offset: number;
 
     constructor(offset: number) {
@@ -22,13 +27,13 @@ export class TranslateAutomata<I extends Lattice2D, O extends Lattice2D> extends
         this.offset = offset;
     }
 
-    processCell(x: number, y:number, stateLattice: O) {
+    processCell(x: number, y:number, stateLattice: STATELATTICE) {
         return x >= this.offset ? stateLattice.get(x-this.offset, y) : stateLattice.get(0, y);
     }
     
 } 
 
-export class AverageAutomata<I extends Lattice2D<Pixel>, O extends Lattice2D<Pixel>> extends FullRangeAutomata<I, O> {
+export class AverageAutomata<STATELATTICE extends Lattice2D<Pixel>, BASELATTICE extends Lattice2D<Pixel>> extends FullRangeAutomata<STATELATTICE, BASELATTICE> {
     private range: number;
 
     constructor(range: number) {
@@ -36,7 +41,7 @@ export class AverageAutomata<I extends Lattice2D<Pixel>, O extends Lattice2D<Pix
         this.range = range;
     }
 
-    processCell(x: number, y:number, stateLattice: O) {
+    processCell(x: number, y:number, stateLattice: STATELATTICE) {
         const newCell = [0,0,0,0] as Pixel;
 
         for (let dy=-this.range;dy<=this.range;dy++) {
@@ -53,32 +58,39 @@ export class AverageAutomata<I extends Lattice2D<Pixel>, O extends Lattice2D<Pix
 
         return newCell;
     }
-} 
+}
 
-export class Environment<BASELATTICE extends Lattice2D, STATELATTICE extends Lattice2D> {
+// Conditional type to infer cell type from lattice type
+type CELLTYPE<L> = L extends Lattice2D<infer STATECELL> ? STATECELL : never;
+
+export class Environment<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | never > {
 
     private base: BASELATTICE;
 
-    private currentState: STATELATTICE;
+    private state: STATELATTICE;
 
-    private automata: Automata<BASELATTICE , STATELATTICE>;
+    private automata: Automata<STATELATTICE, BASELATTICE>;
 
-    constructor(input: BASELATTICE, output: STATELATTICE, automata: Automata<BASELATTICE , STATELATTICE>) {
-        this.base = input;
-        this.currentState = output;
+    constructor(state: STATELATTICE, base: BASELATTICE, automata: Automata<STATELATTICE, BASELATTICE>) {
+        this.base = base;
+        this.state = state;
         this.automata = automata;
     }
 
     applyAutomata() {
-        this.currentState = this.automata.step(this.base, this.currentState);
+        this.state = this.automata.step(this.state, this.base);
     }
 
-    getOutput() {
-        return this.currentState;
+    getState() {
+        return this.state;
     }
 
     getBase() {
         return this.base;
+    }
+
+    getStateAndBase(x: number, y: number): [CELLTYPE<STATELATTICE>, CELLTYPE<BASELATTICE>] {
+        return [this.state.get(x, y), this.base ? this.base.get(x, y) : undefined];
     }
 }
 
@@ -155,6 +167,7 @@ export class BaseLattice2D<CELLTYPE> implements Lattice2D<CELLTYPE> {
 }
 
 export type Pixel = [number, number, number, number];
+// TODO make ImageDataLattice be a subclass of BaseLattice2D
 export class ImageDataLattice implements Lattice2D<Pixel> {
 
     getWidth(): number {

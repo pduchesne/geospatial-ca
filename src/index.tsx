@@ -8,10 +8,9 @@ import {
     TranslateAutomata,
     ImageDataLattice,
     Environment,
-    AverageAutomata,
     BaseLattice2D,
     FullRangeAutomata,
-    Lattice2D,
+    Lattice2D, Automata,
 } from 'ca';
 import OSM from 'ol/source/OSM';
 import * as raster from 'ol/source/Raster';
@@ -27,6 +26,10 @@ import { getHeight } from 'ol/extent';
 import { rgbToHsl } from 'color-utils';
 import {ReactControl, LayerList} from "./ol-helpers";
 import {Coordinate} from "ol/coordinate";
+import Polygon, {fromExtent} from "ol/geom/Polygon";
+import VectorSource from "ol/source/Vector";
+import Feature from "ol/Feature";
+import MousePosition from "ol/control/MousePosition";
 //import Event from 'ol/events/Event';
 //import EventType from 'ol/events/EventType';
 
@@ -172,7 +175,7 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     }
 }
 
-export class WaterflowAutomata extends FullRangeAutomata<TerrainLattice, Lattice2D<TerrainCellStatus>> {
+export class WaterflowAutomata extends FullRangeAutomata<Lattice2D<TerrainCellStatus>, TerrainLattice> {
 
     processCell(x: number, y:number, stateLattice: Lattice2D<TerrainCellStatus>, baseLattice: TerrainLattice) {
         // let's compute the deltas that will be added to the current cell
@@ -210,18 +213,26 @@ export class WaterflowAutomata extends FullRangeAutomata<TerrainLattice, Lattice
 }
 
 
-export class TerrainEnvironment extends Environment<TerrainLattice, Lattice2D<TerrainCellStatus>> {
+export class SpatialEnvironment<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | never> extends Environment<STATELATTICE, BASELATTICE> {
     private extent: extent.Extent;
+    private cellSpatialWidth: number;
+    private cellSpatialHeight: number;
+    private imageDataFn: (state: STATELATTICE, base: BASELATTICE) => ImageData;
 
-    constructor(image: ImageData, extent: extent.Extent) {
+    constructor(state: STATELATTICE,
+                base: BASELATTICE,
+                automata: Automata<STATELATTICE, BASELATTICE>,
+                extent: extent.Extent,
+                imageDataFn: (state: STATELATTICE, base: BASELATTICE) => ImageData) {
         super(
-            TerrainLattice.createFromImages(image),
-            new BaseLattice2D<TerrainCellStatus>(image.width, image.height, (x, y) => ([0, Math.random()>.9 ? 50 : 0])),
-            new WaterflowAutomata()
+            state,
+            base,
+            automata
         );
-
-        console.log(`Terrain initialized with [${this.getBase().getHeight()},${this.getBase().getWidth()}] cells`);
+        this.imageDataFn = imageDataFn;
         this.extent = extent;
+        this.cellSpatialWidth = (extent[2] - extent[0]) / state.getWidth();
+        this.cellSpatialHeight = (extent[3] - extent[1]) / state.getHeight();
     }
 
     getExtent() {
@@ -231,45 +242,44 @@ export class TerrainEnvironment extends Environment<TerrainLattice, Lattice2D<Te
     renderOnCanvas() {
         const canvas: HTMLCanvasElement = document.createElement('canvas');
 
-        const imageLattice = ImageDataLattice.fromLattice(this.getOutput(), (x, y, cell) => [0,0,255,Math.min(1, cell[1]/10)*255]);
-
-        canvas.setAttribute('width', this.getOutput().getWidth()+'px');
-        canvas.setAttribute('height', this.getOutput().getHeight()+'px');
-        canvas.getContext('2d')!.putImageData(imageLattice.getData(), 0, 0);
+        canvas.setAttribute('width', this.getState().getWidth()+'px');
+        canvas.setAttribute('height', this.getState().getHeight()+'px');
+        canvas.getContext('2d')!.putImageData(this.imageDataFn(this.getState(), this.getBase()), 0, 0);
 
         return canvas;
+    }
+
+    getCellAt(coords: Coordinate) {
+        const cellX = Math.floor( (this.getBase().getWidth())*(coords[0]-this.getExtent()[0])/(this.getExtent()[2]-this.getExtent()[0]) );
+        const cellY = Math.floor( (this.getBase().getHeight())*(-coords[1]+this.getExtent()[3])/(this.getExtent()[3]-this.getExtent()[1]) );
+        const cellExtent = [
+            this.getExtent()[0]+ (cellX)*this.cellSpatialWidth,
+            this.getExtent()[3]- (cellY)*this.cellSpatialHeight,
+            this.getExtent()[0]+ (cellX+1)*this.cellSpatialWidth,
+            this.getExtent()[3]- (cellY+1)*this.cellSpatialHeight];
+        return {
+            xy: [cellX, cellY],
+            geom: fromExtent(cellExtent),
+            cell: this.getStateAndBase(cellX, cellY)
+        };
     }
 
 }
 
-
-export class SpatialEnvironment extends Environment<ImageDataLattice, ImageDataLattice> {
-    private extent: extent.Extent;
+export class TerrainEnvironment extends SpatialEnvironment<Lattice2D<TerrainCellStatus>, TerrainLattice> {
 
     constructor(image: ImageData, extent: extent.Extent) {
         super(
-            new ImageDataLattice(image),
-            new ImageDataLattice(image), // init env with basemap as state
-            //new TranslateAutomata(10)
-            new AverageAutomata(1)
+            new BaseLattice2D<TerrainCellStatus>(image.width, image.height, (x, y) => ([0, Math.random()>.9 ? 50 : 0])),
+            TerrainLattice.createFromImages(image),
+            new WaterflowAutomata(),
+            extent,
+            (state, base) => {
+                return ImageDataLattice.fromLattice(state, (x, y, cell) => [0,0,255,Math.min(1, cell[1]/10)*255]).getData();
+            }
         );
 
-
-        this.extent = extent;
-    }
-
-    getExtent() {
-        return this.extent;
-    }
-
-    renderOnCanvas() {
-        const canvas: HTMLCanvasElement = document.createElement('canvas');
-
-        canvas.setAttribute('width', this.getOutput().getWidth()+'px');
-        canvas.setAttribute('height', this.getOutput().getHeight()+'px');
-        canvas.getContext('2d')!.putImageData(this.getOutput().getData(), 0, 0);
-
-        return canvas;
+        console.log(`Terrain initialized with [${this.getBase().getHeight()},${this.getBase().getWidth()}] cells`);
     }
 
 }
@@ -321,17 +331,6 @@ export class CellularAutomataSource2 extends ImageSource {
             }
         }
     }
-
-    getCellAt(coords: Coordinate): TerrainCell | undefined {
-        if (this.caEnv) {
-            const cellX = (this.caEnv.getBase().getWidth())*(coords[0]-this.caEnv.getExtent()[0])/(this.caEnv.getExtent()[2]-this.caEnv.getExtent()[0]);
-            const cellY = (this.caEnv.getBase().getHeight())*(-coords[1]+this.caEnv.getExtent()[3])/(this.caEnv.getExtent()[3]-this.caEnv.getExtent()[1]);
-            return this.getEnv()?.getBase().get(Math.round(cellX), Math.round(cellY));
-        } else {
-            return undefined;
-        }
-
-    }
 }
 
 
@@ -357,7 +356,7 @@ export class CellularAutomataSource extends ImageCanvasSource {
                     //extent[2] = this.extent[2];
                     //extent[3] = this.extent[3];
 
-                    canvas.getContext('2d')!.putImageData(caEnv.getOutput().getData(), 0, 0);
+                    canvas.getContext('2d')!.putImageData(caEnv.getState().getData(), 0, 0);
                 }
                 return canvas;
             }
@@ -387,7 +386,7 @@ export const MyMap = () => {
     const [viewOptions, setViewOptions] = useState<ViewOptions>();
 
     const mapDiv = useRef<HTMLDivElement>(null);
-    const [selectedCell, setSelectedCell] = useState<TerrainCell>();
+    const [selectedCell, setSelectedCell] = useState<{geom: Polygon, cell: [TerrainCellStatus, TerrainCell]}>();
 
     useEffect( () => {
         setViewOptions( { center: [0, 0], zoom: 1 } );
@@ -414,6 +413,11 @@ export const MyMap = () => {
         },
         [] );
 
+    const selectedFeatures = useMemo( () => {
+            return new VectorSource();
+        },
+        [] );
+
     const imagesContainer = useMemo( () => {
             const container = new RenderedImagesContainer({
                 sources: [imageSource]
@@ -429,6 +433,7 @@ export const MyMap = () => {
     const olmap = useMemo( () => {
 
             const map = new Map({
+                controls: [new MousePosition()],
                 target: mapDiv.current || undefined,
                 layers: [
                     new layer.Tile({source: new OSM()}),
@@ -439,6 +444,9 @@ export const MyMap = () => {
                     }),
                     new layer.Image({
                         source: caImageSource
+                    }),
+                    new layer.Vector({
+                        source: selectedFeatures
                     })
                 ],
                 view: new View(viewOptions)
@@ -449,8 +457,8 @@ export const MyMap = () => {
                     const targetSource = layer.getSource();
                     if (caImageSource == targetSource) {
                         const xy1 = evt.coordinate;
-                        const cell = caImageSource.getCellAt(xy1);
-                        setSelectedCell(cell);
+                        const cellFeature = caImageSource.getEnv()?.getCellAt(xy1);
+                        setSelectedCell(cellFeature);
                     }
                 });
             });
@@ -460,8 +468,10 @@ export const MyMap = () => {
         [mapDiv.current, viewOptions, imagesContainer] );
 
     useEffect( () => {
-        //olmap.addControl(new ReactControl( LayerList ));
-    }, [olmap])
+        selectedFeatures.clear();
+        selectedFeatures.addFeature(new Feature(selectedCell?.geom));
+        selectedFeatures.changed();
+    }, [selectedFeatures, selectedCell?.geom])
 
 
     olmap.getLayers()//.item(0).
@@ -471,16 +481,34 @@ export const MyMap = () => {
         <button onMouseUp={() => stepAutomata(1)}>STEP</button>>
         <button onMouseUp={() => stepAutomata(50)}>STEP50</button>>
 
-        <div style={{width: '60%'}}>
-            <div style={{height: '400px'}} ref={mapDiv}/>
-            <ReactControl map={olmap}>
-                <LayerList map={olmap}/>
-            </ReactControl>
+        <div style={{display: "flex"}}>
+            <div style={{flex: 2}}>
+                <div style={{height: '400px'}} ref={mapDiv}/>
+                <ReactControl map={olmap}>
+                    <LayerList map={olmap}/>
+                </ReactControl>
+            </div>
+            <div style={{flex: 1}}>
+                {selectedCell && (
+                    <>
+                    <table>
+                        <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
+                        <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
+                    </table>
+                    <DiffusionMatrix matrix={selectedCell.cell[1].diffusionMatrix}/>
+                    </>
+                )}
+            </div>
         </div>
-        <div style={{width: '40%'}}>
-            {JSON.stringify(selectedCell)}
-        </div>
+
     </div>
+}
+
+const DiffusionMatrix = (props: {matrix: number[][]}) => {
+    const {matrix} = props;
+    return <table>
+        {matrix.map(row => <tr>{row.map(cell => <td>{cell.toFixed(2)}</td>)}</tr>)}
+    </table>
 }
 
 ReactDOM.render(<App />, document.getElementById('index'));

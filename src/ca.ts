@@ -65,6 +65,8 @@ type CELLTYPE<L> = L extends Lattice2D<infer STATECELL> ? STATECELL : never;
 
 export class Environment<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | never > {
 
+    private _lastIterationTime: number;
+
     private base: BASELATTICE;
 
     private state: STATELATTICE;
@@ -78,7 +80,9 @@ export class Environment<STATELATTICE extends Lattice2D, BASELATTICE extends Lat
     }
 
     applyAutomata() {
+        const start = new Date().getTime();
         this.state = this.automata.step(this.state, this.base);
+        this._lastIterationTime = new Date().getTime() - start;
     }
 
     getState() {
@@ -91,6 +95,10 @@ export class Environment<STATELATTICE extends Lattice2D, BASELATTICE extends Lat
 
     getStateAndBase(x: number, y: number): [CELLTYPE<STATELATTICE>, CELLTYPE<BASELATTICE>] {
         return [this.state.get(x, y), this.base ? this.base.get(x, y) : undefined];
+    }
+
+    get lastIterationTime(): number {
+        return this._lastIterationTime;
     }
 }
 

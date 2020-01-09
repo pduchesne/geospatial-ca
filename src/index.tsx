@@ -275,7 +275,7 @@ export class TerrainEnvironment extends SpatialEnvironment<Lattice2D<TerrainCell
 
     constructor(image: ImageData, extent: extent.Extent) {
         super(
-            new BaseLattice2D<TerrainCellStatus>(image.width, image.height, (x, y) => ([0, Math.random()>.9 ? 50 : 0])),
+            new BaseLattice2D<TerrainCellStatus>(image.width, image.height, (x, y) => ([0, Math.random()>.5 ? 2 : 0])),
             TerrainLattice.createFromImages(image),
             new WaterflowAutomata(),
             extent,
@@ -293,9 +293,14 @@ export class CellularAutomataSource2 extends ImageSource {
 
     private caEnv: TerrainEnvironment | undefined;
     private renderedImage: ImageBase;
+    private _renderingTime: number;
 
     constructor(options: Options) {
         super(options);
+    }
+
+    get renderingTime(): number {
+        return this._renderingTime;
     }
 
     setInputImages(images: ImageData[] | undefined, extent: extent.Extent) {
@@ -316,12 +321,15 @@ export class CellularAutomataSource2 extends ImageSource {
     };
 
     renderOutput () {
+        const start = new Date().getTime();
         if (this.caEnv) {
             const image = this.caEnv.renderOnCanvas();
             const resolution = getHeight(this.caEnv.getExtent()) / image.height;
             this.renderedImage = new ImageCanvas(this.caEnv.getExtent(), resolution, 1, image);
         } else
             this.renderedImage = undefined as unknown as ImageBase;
+
+        this._renderingTime = new Date().getTime() - start;
 
         //super.handleImageChange(new Event(EventType.CHANGE));
         this.changed();
@@ -392,6 +400,7 @@ export const MyMap = () => {
 
     const mapDiv = useRef<HTMLDivElement>(null);
     const [selectedCell, setSelectedCell] = useState<{geom: Polygon, cell: [TerrainCellStatus, TerrainCell]}>();
+    const [caState, setCaState] = useState<{iterationTime?: number, renderingtime?: number}>();
 
     useEffect( () => {
         setViewOptions( { center: [0, 0], zoom: 1 } );
@@ -401,7 +410,15 @@ export const MyMap = () => {
 
             //return new ImageImageData({ projection: 'EPSG:4326', imageExtent: [-180,-90,180,90] });
 
-            return new CellularAutomataSource2({});
+            const source = new CellularAutomataSource2({});
+            source.on("change", (evt) => {
+                setCaState({
+                    iterationTime: source.getEnv()?.lastIterationTime,
+                    renderingtime: source.renderingTime
+                });
+            })
+
+        return source;
 
         } ,
         [] );
@@ -482,10 +499,6 @@ export const MyMap = () => {
     olmap.getLayers()//.item(0).
 
     return <div>
-        <button onMouseUp={() => caImageSource.setInputImages(imagesContainer.getImages(), olmap.getView().calculateExtent())}>SNAPSHOT</button>>
-        <button onMouseUp={() => stepAutomata(1)}>STEP</button>>
-        <button onMouseUp={() => stepAutomata(50)}>STEP50</button>>
-
         <div style={{display: "flex"}}>
             <div style={{flex: 2}}>
                 <div style={{height: '400px'}} ref={mapDiv}/>
@@ -494,6 +507,15 @@ export const MyMap = () => {
                 </ReactControl>
             </div>
             <div style={{flex: 1}}>
+                <div>
+                    <button onMouseUp={() => caImageSource.setInputImages(imagesContainer.getImages(), olmap.getView().calculateExtent())}>SNAPSHOT</button>>
+                    <button onMouseUp={() => stepAutomata(1)}>STEP</button>>
+                    <button onMouseUp={() => stepAutomata(50)}>STEP50</button>>
+                </div>
+                <div>
+                    Perf CA {caState?.iterationTime} ; Perf Render {caState?.renderingtime}
+                </div>
+
                 {selectedCell && (
                     <>
                     <table>

@@ -4,7 +4,7 @@ export type Automata<STATELATTICE extends Lattice2D<STATECELL>, BASELATTICE exte
 }
 
 
-export abstract class FullRangeAutomata<STATELATTICE extends Lattice2D<STATECELL>, BASELATTICE extends Lattice2D<BASECELL> | void, STATECELL = any, BASECELL = any>
+export abstract class CellByCellAutomata<STATELATTICE extends Lattice2D<STATECELL>, BASELATTICE extends Lattice2D<BASECELL> | void, STATECELL = any, BASECELL = any>
     implements Automata<STATELATTICE, BASELATTICE> {
 
     step(stateLattice: STATELATTICE, baseLattice: BASELATTICE) {
@@ -17,9 +17,9 @@ export abstract class FullRangeAutomata<STATELATTICE extends Lattice2D<STATECELL
 
     abstract processCell(x: number, y:number, stateLattice: STATELATTICE, baseLattice?: BASELATTICE) : STATECELL;
     
-} 
+}
 
-export class TranslateAutomata<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | void> extends FullRangeAutomata<STATELATTICE, BASELATTICE> {
+export class TranslateAutomata<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | void> extends CellByCellAutomata<STATELATTICE, BASELATTICE> {
     private offset: number;
 
     constructor(offset: number) {
@@ -33,7 +33,7 @@ export class TranslateAutomata<STATELATTICE extends Lattice2D, BASELATTICE exten
     
 } 
 
-export class AverageAutomata<STATELATTICE extends Lattice2D<Pixel>, BASELATTICE extends Lattice2D<Pixel>> extends FullRangeAutomata<STATELATTICE, BASELATTICE> {
+export class AverageAutomata<STATELATTICE extends Lattice2D<Pixel>, BASELATTICE extends Lattice2D<Pixel>> extends CellByCellAutomata<STATELATTICE, BASELATTICE> {
     private range: number;
 
     constructor(range: number) {
@@ -114,6 +114,8 @@ export interface Lattice2D<C = any> {
     //newState(): Lattice2D<C>;
 
     newInstance(width?: number, height?: number): Lattice2D<C>;
+
+    forEach(forEachFn: (cell: C, x: number, y: number, _this: Lattice2D<C>) => void): void;
 }
 
 export function mapInto<SOURCE extends Lattice2D<SOURCECELL>, SOURCECELL, TARGET extends Lattice2D<TARGETCELL>, TARGETCELL>
@@ -166,8 +168,8 @@ export class BaseLattice2D<CELLTYPE> implements Lattice2D<CELLTYPE> {
     }
 
     forEach(forEachFn: (cell: CELLTYPE, x: number, y: number, _this: Lattice2D<CELLTYPE>) => void) {
-        for (let y=0;y<this.getHeight();y++) {
-            for (let x=0;x<this.getWidth();x++) {
+        for (let y = 0; y < this.getHeight(); y++) {
+            for (let x = 0; x < this.getWidth(); x++) {
                 forEachFn(this.get(x, y), x, y, this);
             }
         }

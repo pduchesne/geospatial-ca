@@ -9,7 +9,7 @@ import {
     ImageDataLattice,
     Environment,
     BaseLattice2D,
-    FullRangeAutomata,
+    CellByCellAutomata,
     Lattice2D, Automata,
 } from 'ca';
 import OSM from 'ol/source/OSM';
@@ -88,8 +88,8 @@ export type TerrainCell = {
 
 }
 
-// array of [water_inner, water_outer]
-export type TerrainCellStatus = [number, number];
+// array of [water_inner, water_outer, globalXYDirection]
+export type TerrainCellStatus = [number, number, [number,number], number[][]?];
 
 export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     static createFromImages(dem: ImageData, landuse?: ImageData) {
@@ -116,7 +116,7 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     static initTerrainCellValues(x: number, y:number, demLattice: ImageDataLattice): TerrainCell {
 
         const currentCell = demLattice.get(x,y);
-        const altitude = 255*(1-rgbToHsl(currentCell)[0]);
+        const altitude = 1000*(1-rgbToHsl(currentCell)[0]);
 
         return {
             altitude,
@@ -178,7 +178,10 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     }
 }
 
-export class WaterflowAutomata extends FullRangeAutomata<Lattice2D<TerrainCellStatus>, TerrainLattice> {
+/**
+ * CA that uses preprocessed diffusion matrix
+ */
+export class WaterflowAutomata1 extends CellByCellAutomata<Lattice2D<TerrainCellStatus>, TerrainLattice> {
 
     processCell(x: number, y:number, stateLattice: Lattice2D<TerrainCellStatus>, baseLattice: TerrainLattice) {
         // let's compute the deltas that will be added to the current cell
@@ -214,6 +217,86 @@ export class WaterflowAutomata extends FullRangeAutomata<Lattice2D<TerrainCellSt
         }
 
         return [thisTerrainStateCell[0] + water_inner_delta, thisTerrainStateCell[1] + water_outer_delta];
+    }
+}
+
+/**
+ * CA that does on the fly water diffusion computation
+ */
+export class WaterflowAutomata2 implements Automata<Lattice2D<TerrainCellStatus>, TerrainLattice> {
+    step(currentState: Lattice2D<TerrainCellStatus>, baseLattice: TerrainLattice) {
+        const newState = currentState.newInstance();
+        currentState.forEach( (cell, x, y) => {
+            this.processCell(x, y, currentState, newState, baseLattice);
+        } );
+
+        return newState;
+    };
+
+    processCell(x: number, y:number, currentState: Lattice2D<TerrainCellStatus>, newState: Lattice2D<TerrainCellStatus>, baseLattice: TerrainLattice) {
+
+        const thisTerrainCell = baseLattice.get(x,y);
+        const thisTerrainStateCell = currentState.get(x,y);
+        const currentWaterLevel = thisTerrainStateCell[1];
+
+        if (!newState.get(x,y)) newState.set(x,y,[...thisTerrainStateCell] as TerrainCellStatus);
+
+        // cumulativeVolume must be the sum of all transferVolumes
+        let cumulativeVolume = 0;
+        const transferVolumes = [[NaN,NaN,NaN], [NaN, currentWaterLevel, NaN], [NaN, NaN, NaN]];
+
+        for (let dy=-1;dy<=1;dy++) {
+            for (let dx=-1;dx<=1;dx++) {
+                if (x+dx >= 0 && y+dy >= 0 && x+dx < currentState.getWidth() && y+dy < currentState.getHeight()) {
+                    if (dx == 0 && dy == 0) continue;
+
+                    const fromState = currentState.get(x+dx, y+dy);
+                    const fromBase = baseLattice.get(x+dx, y+dy);
+
+                    // heightDiff > 0 means this cell has absolute higher water level than neighbour
+                    const heightDiff = thisTerrainCell.altitude + currentWaterLevel - fromBase.altitude - fromState[1];
+
+                    if (heightDiff > 0) {
+                        // volumeTransfer must be <= currentWaterLevel
+                        let volumeTransfer =  Math.min(currentWaterLevel, heightDiff / 4);
+
+                        if (dx == dy) volumeTransfer = volumeTransfer / 1.41; // diagonal moves should be adjusted to have uniform volume per meter
+                        transferVolumes[dy+1][dx+1] = volumeTransfer;
+                        cumulativeVolume += volumeTransfer;
+
+                        const remaining = currentWaterLevel - volumeTransfer;
+                        if (remaining > 0 && remaining<transferVolumes[1][1]) {
+                            transferVolumes[1][1] = remaining;
+                        }
+                    }
+                }
+            }
+        }
+        cumulativeVolume += transferVolumes[1][1];
+        transferVolumes[1][1] -= cumulativeVolume;
+
+        let direction = [0,0] as [number, number];
+        const relTransferVolume = cumulativeVolume && currentWaterLevel / cumulativeVolume ;
+        for (let dy=-1;dy<=1;dy++) {
+            for (let dx=-1;dx<=1;dx++) {
+                const transferredVolume = transferVolumes[dy+1][dx+1];
+
+                if (!isNaN(transferredVolume)) {
+                    const targetCurrentState = currentState.get(x+dx, y+dy);
+                    let targetNewState = newState.get(x+dx, y+dy);
+                    if (!targetNewState) newState.set(x+dx, y+dy, targetNewState = [...targetCurrentState] as TerrainCellStatus);
+
+                    targetNewState[1] += transferredVolume * relTransferVolume * 0.95;
+
+                    direction[0] += dx * transferredVolume;
+                    direction[1] += dy * transferredVolume;
+                }
+
+            }
+        }
+
+        newState.get(x, y)[2] = direction;
+        newState.get(x, y)[3] = transferVolumes;
     }
 }
 
@@ -254,19 +337,25 @@ export class SpatialEnvironment<STATELATTICE extends Lattice2D, BASELATTICE exte
         return canvas;
     }
 
-    getCellAt(coords: Coordinate) {
-        const cellX = Math.floor( (this.getBase().getWidth())*(coords[0]-this.getExtent()[0])/(this.getExtent()[2]-this.getExtent()[0]) );
-        const cellY = Math.floor( (this.getBase().getHeight())*(-coords[1]+this.getExtent()[3])/(this.getExtent()[3]-this.getExtent()[1]) );
+    getCellAtPixel(cellXY: [number, number]) {
+        const [cellX, cellY] = cellXY;
+
         const cellExtent = [
             this.getExtent()[0]+ (cellX)*this.cellSpatialWidth,
             this.getExtent()[3]- (cellY)*this.cellSpatialHeight,
             this.getExtent()[0]+ (cellX+1)*this.cellSpatialWidth,
             this.getExtent()[3]- (cellY+1)*this.cellSpatialHeight];
         return {
-            xy: [cellX, cellY],
+            xy: [cellX, cellY] as [number, number],
             geom: fromExtent(cellExtent),
             cell: this.getStateAndBase(cellX, cellY)
         };
+    }
+
+    getCellAtSpatial(coords: Coordinate) {
+        const cellX = Math.floor( (this.getBase().getWidth())*(coords[0]-this.getExtent()[0])/(this.getExtent()[2]-this.getExtent()[0]) );
+        const cellY = Math.floor( (this.getBase().getHeight())*(-coords[1]+this.getExtent()[3])/(this.getExtent()[3]-this.getExtent()[1]) );
+        return this.getCellAtPixel([cellX, cellY]);
     }
 
 }
@@ -274,13 +363,16 @@ export class SpatialEnvironment<STATELATTICE extends Lattice2D, BASELATTICE exte
 export class TerrainEnvironment extends SpatialEnvironment<Lattice2D<TerrainCellStatus>, TerrainLattice> {
 
     constructor(image: ImageData, extent: extent.Extent) {
+
+        const level2alpha = (level: number) => 1 - 1 / Math.pow(1 + level/5 , 2);
+
         super(
-            new BaseLattice2D<TerrainCellStatus>(image.width, image.height, (x, y) => ([0, Math.random()>.5 ? 2 : 0])),
+            new BaseLattice2D<TerrainCellStatus>(image.width, image.height, (x, y) => ([0, Math.random()>.5 ? 0.4 : 0, [0,0]])),
             TerrainLattice.createFromImages(image),
-            new WaterflowAutomata(),
+            new WaterflowAutomata2(),
             extent,
             (state, base) => {
-                return ImageDataLattice.fromLattice(state, (x, y, cell) => [0,0,255,Math.min(1, cell[1]/10)*255]).getData();
+                return ImageDataLattice.fromLattice(state, (x, y, cell) => [0,0,255,level2alpha(cell[1])*255]).getData();
             }
         );
 
@@ -399,8 +491,10 @@ export const MyMap = () => {
     const [viewOptions, setViewOptions] = useState<ViewOptions>();
 
     const mapDiv = useRef<HTMLDivElement>(null);
-    const [selectedCell, setSelectedCell] = useState<{geom: Polygon, cell: [TerrainCellStatus, TerrainCell]}>();
+    const [selectedCell, setSelectedCell] = useState<{xy: [number, number], geom: Polygon, cell: [TerrainCellStatus, TerrainCell]}>();
     const [caState, setCaState] = useState<{iterationTime?: number, renderingtime?: number}>();
+
+    const [pendingIterations, setPendingIterations] = useState<number>(0);
 
     useEffect( () => {
         setViewOptions( { center: [0, 0], zoom: 1 } );
@@ -449,7 +543,7 @@ export const MyMap = () => {
         [] );
 
     const stepAutomata = (n: number) => {
-        caImageSource.stepAutomata(n);
+        setPendingIterations(n);
     }
 
     const olmap = useMemo( () => {
@@ -479,7 +573,7 @@ export const MyMap = () => {
                     const targetSource = layer.getSource();
                     if (caImageSource == targetSource) {
                         const xy1 = evt.coordinate;
-                        const cellFeature = caImageSource.getEnv()?.getCellAt(xy1);
+                        const cellFeature = caImageSource.getEnv()?.getCellAtSpatial(xy1);
                         setSelectedCell(cellFeature);
                     }
                 });
@@ -496,6 +590,14 @@ export const MyMap = () => {
     }, [selectedFeatures, selectedCell?.geom])
 
 
+    useEffect( () => {
+        if (pendingIterations > 0) {
+            caImageSource.stepAutomata(1);
+            selectedCell && setSelectedCell(caImageSource.getEnv()?.getCellAtPixel(selectedCell.xy));
+            setPendingIterations(pendingIterations-1);
+        }
+    }, [pendingIterations])
+
     olmap.getLayers()//.item(0).
 
     return <div>
@@ -510,7 +612,7 @@ export const MyMap = () => {
                 <div>
                     <button onMouseUp={() => caImageSource.setInputImages(imagesContainer.getImages(), olmap.getView().calculateExtent())}>SNAPSHOT</button>>
                     <button onMouseUp={() => stepAutomata(1)}>STEP</button>>
-                    <button onMouseUp={() => stepAutomata(50)}>STEP50</button>>
+                    <button onMouseUp={() => stepAutomata(3)}>STEP50</button>>
                 </div>
                 <div>
                     Perf CA {caState?.iterationTime} ; Perf Render {caState?.renderingtime}
@@ -521,8 +623,9 @@ export const MyMap = () => {
                     <table>
                         <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
                         <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
+                        <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
                     </table>
-                    <DiffusionMatrix matrix={selectedCell.cell[1].diffusionMatrix}/>
+                        <DiffusionMatrix matrix={selectedCell.cell[0][3]}/>
                     </>
                 )}
             </div>
@@ -531,11 +634,12 @@ export const MyMap = () => {
     </div>
 }
 
-const DiffusionMatrix = (props: {matrix: number[][]}) => {
+export const DiffusionMatrix = (props: {matrix?: number[][]}) => {
     const {matrix} = props;
-    return <table>
-        {matrix.map(row => <tr>{row.map(cell => <td>{cell.toFixed(2)}</td>)}</tr>)}
-    </table>
+    return matrix ?
+        <table>
+            {matrix.map(row => <tr>{row.map(cell => <td>{cell.toFixed(2)}</td>)}</tr>)}
+        </table> : null;
 }
 
 ReactDOM.render(<App />, document.getElementById('index'));

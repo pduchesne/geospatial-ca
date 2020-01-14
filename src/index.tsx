@@ -2,7 +2,10 @@ import * as ReactDOM from 'react-dom';
 import * as React from 'react';
 import { BrowserRouter, Route } from 'react-router-dom';
 import { Map, View } from 'ol';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import { Tabs, Tab} from 'react-bootstrap';
 import 'ol/ol.css';
+import 'ol-ca.css';
 import { useState, useRef, useMemo, useEffect } from 'react';
 import {
     TranslateAutomata,
@@ -28,6 +31,8 @@ import { TerrainEnvironment } from 'ca/waterflow';
 
 import { editor } from "monaco-editor";
 import MonacoEditor from "react-monaco-editor";
+import { SizeMeasurer } from 'utils/ui';
+
 
 export const App = () => (
     <BrowserRouter>
@@ -68,7 +73,7 @@ export class RenderedImagesContainer extends raster.default {
 }
 
 
-export function CodeEditor(props: {code: string, onCodeChange?: (code: string) => void}) {
+export function CodeEditor(props: {code: string, onCodeChange?: (code: string) => void, height?: string | number}) {
     /*
     const [editor, setEditor] = useState<editor.IStandaloneCodeEditor>();
 
@@ -89,6 +94,7 @@ export function CodeEditor(props: {code: string, onCodeChange?: (code: string) =
       } ), [])
 
     return <MonacoEditor
+    height={props.height}
     language="javascript"
     value={props.code}
     options={options}
@@ -268,28 +274,40 @@ export const MyMap = () => {
                     <LayerList map={olmap}/>
                 </ReactControl>
             </div>
-            <div style={{flex: 1}}>
-                <div>
-                    <button onMouseUp={() => caImageSource.setInputImages(imagesContainer.getImages(), olmap.getView().calculateExtent())}>SNAPSHOT</button>>
-                    <button onMouseUp={() => stepAutomata(1)}>STEP</button>>
-                    <button onMouseUp={() => stepAutomata(3)}>STEP50</button>>
-                </div>
-                <div>
-                    Perf CA {caState?.iterationTime} ; Perf Render {caState?.renderingtime}
-                </div>
+            <div style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
 
-                {selectedCell && (
-                    <>
-                    <table>
-                        <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
-                        <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
-                        <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
-                    </table>
-                        <MatrixDisplay matrix={selectedCell.cell[0][3]}/>
-                    </>
-                )}
 
-                    <CodeEditor code="// some test code"/>
+            <Tabs defaultActiveKey="controls" id="menu">
+                <Tab eventKey="controls" title="Controls">
+                    <div>
+                        <button onMouseUp={() => caImageSource.setInputImages(imagesContainer.getImages(), olmap.getView().calculateExtent())}>SNAPSHOT</button>>
+                        <button onMouseUp={() => stepAutomata(1)}>STEP</button>>
+                        <button onMouseUp={() => stepAutomata(3)}>STEP50</button>>
+                    </div>
+                    <div>
+                        Perf CA {caState?.iterationTime} ; Perf Render {caState?.renderingtime}
+                    </div>
+
+                    {selectedCell && (
+                        <>
+                        <table>
+                            <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
+                            <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
+                            <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
+                        </table>
+                            <MatrixDisplay matrix={selectedCell.cell[0][3]}/>
+                        </>
+                    )}
+                </Tab>
+                <Tab eventKey="code" title="Code">
+                    <SizeMeasurer>
+                        {(props: {height: number, width: number} ) => (
+                            <CodeEditor code="// some test code" height={props.height-80}/>
+                        )} 
+
+                    </SizeMeasurer>
+                </Tab>
+            </Tabs>
             </div>
         </div>
 

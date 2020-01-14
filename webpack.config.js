@@ -1,4 +1,5 @@
 const HtmlWebPackPlugin = require('html-webpack-plugin');
+const MonacoWebpackPlugin = require("monaco-editor-webpack-plugin");
 var webpack = require('webpack');
 
 var path = require('path');
@@ -21,14 +22,7 @@ const definePlugin = new webpack.DefinePlugin({
 const dev = true;
 
 var styleLoader = 'style-loader';
-var cssLoader = {
-    loader: 'css-loader',
-    options: {
-        importLoaders: 1,
-        // we are not using css modules
-        modules: false //{ localIdentName: '[name]__[local]___[hash:base64:5]' },
-    }
-};
+var cssLoader =  'css-loader';
 
 
 module.exports = {
@@ -65,7 +59,11 @@ module.exports = {
             {
                 test: /\.css$/,
                 use: [styleLoader, cssLoader]
-            }
+            },
+            { // required for monaco editor
+                test: /\.ttf$/,
+                use: ["file-loader"]
+              }
         ]
     },
     // this will create a development server to host our application
@@ -82,5 +80,10 @@ module.exports = {
     // this will watch the bundle for any changes
     //watch: true,
     // specify the plugins which you are using
-    plugins: [htmlPlugin, definePlugin]
+    plugins: [
+        htmlPlugin, 
+        definePlugin,     
+        new MonacoWebpackPlugin({
+        languages: ["json", "javascript", "typescript"]
+      })]
 };

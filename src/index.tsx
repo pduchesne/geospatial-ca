@@ -26,6 +26,9 @@ import { TerrainEnvironment } from 'ca/waterflow';
 //import Event from 'ol/events/Event';
 //import EventType from 'ol/events/EventType';
 
+import { editor } from "monaco-editor";
+import MonacoEditor from "react-monaco-editor";
+
 export const App = () => (
     <BrowserRouter>
         <div>
@@ -64,6 +67,35 @@ export class RenderedImagesContainer extends raster.default {
     }
 }
 
+
+export function CodeEditor(props: {code: string, onCodeChange?: (code: string) => void}) {
+    /*
+    const [editor, setEditor] = useState<editor.IStandaloneCodeEditor>();
+
+    const onEditorMount = useMemo(
+        () => 
+            (editor: editor.IStandaloneCodeEditor) => {
+                setEditor(editor);
+            }, 
+        []);
+        */
+        
+    const options = useMemo<editor.IEditorConstructionOptions>(() => ( {
+        selectOnLineNumbers: true,
+        roundedSelection: false,
+        readOnly: false,
+        cursorStyle: "line",
+        automaticLayout: false
+      } ), [])
+
+    return <MonacoEditor
+    language="javascript"
+    value={props.code}
+    options={options}
+    onChange={props.onCodeChange}
+    //editorDidMount={onEditorMount}
+  />
+}
 
 export class CellularAutomataSource extends ImageCanvasSource {
 
@@ -253,16 +285,18 @@ export const MyMap = () => {
                         <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
                         <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
                     </table>
-                        <DiffusionMatrix matrix={selectedCell.cell[0][3]}/>
+                        <MatrixDisplay matrix={selectedCell.cell[0][3]}/>
                     </>
                 )}
+
+                    <CodeEditor code="// some test code"/>
             </div>
         </div>
 
     </div>
 }
 
-export const DiffusionMatrix = (props: {matrix?: number[][]}) => {
+export const MatrixDisplay = (props: {matrix?: number[][]}) => {
     const {matrix} = props;
     return matrix ?
         <table>

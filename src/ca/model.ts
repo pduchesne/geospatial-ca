@@ -1,4 +1,5 @@
 
+
 export type Automata<STATELATTICE extends Lattice2D<STATECELL>, BASELATTICE extends Lattice2D<BASECELL> | void, STATECELL = any, BASECELL = any> = {
    step: (currentState: STATELATTICE, baseLattice: BASELATTICE) => STATELATTICE;
 }
@@ -60,8 +61,10 @@ export class AverageAutomata<STATELATTICE extends Lattice2D<Pixel>, BASELATTICE 
     }
 }
 
+export type LATTICETYPE<C> = [C] extends [never] ? never : Lattice2D<C>;
+
 // Conditional type to infer cell type from lattice type
-type CELLTYPE<L> = L extends Lattice2D<infer STATECELL> ? STATECELL : never;
+export type CELLTYPE<L> = L extends Lattice2D<infer STATECELL> ? STATECELL : never;
 
 export class Environment<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | never > {
 

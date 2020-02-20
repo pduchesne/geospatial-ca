@@ -1,4 +1,4 @@
-import { Lattice2D, Environment, Automata, ImageDataLattice, BaseLattice2D } from "./model";
+import {Lattice2D, Environment, Automata, ImageDataLattice, BaseLattice2D, LATTICETYPE} from "./model";
 import {Coordinate} from "ol/coordinate";
 import {fromExtent} from "ol/geom/Polygon";
 import { Extent, getHeight } from "ol/extent";
@@ -6,6 +6,20 @@ import { rgbToHsl } from "color-utils";
 import { ImageBase, ImageCanvas } from "ol";
 import ImageSource, { Options } from "ol/source/Image";
 import Projection from "ol/proj/Projection";
+import {Size} from "ol/size";
+
+export type AutomataDescriptor<STATECELL = any, BASECELL = never> = {
+    init: (images: ImageData[], size: Size) => [Lattice2D<STATECELL>, LATTICETYPE<BASECELL>],
+
+    stepFn: (currentState: Lattice2D<STATECELL>, base: LATTICETYPE<BASECELL>) => Lattice2D<STATECELL>,
+
+    renderFn: (state: Lattice2D<STATECELL>, base: LATTICETYPE<BASECELL>) => ImageData
+}
+
+export type ProjectDescriptor<STATECELL = any, BASECELL = never> = AutomataDescriptor<STATECELL, BASECELL> & {
+    layers: string[],
+    extent: [number, number, number, number]
+}
 
 export class SpatialEnvironment<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | never> extends Environment<STATELATTICE, BASELATTICE> {
     private extent: Extent;
@@ -106,10 +120,9 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     static initTerrainCellValues(x: number, y:number, demLattice: ImageDataLattice): TerrainCell {
 
         const currentCell = demLattice.get(x,y);
-        const altitude = 1000*(1-rgbToHsl(currentCell)[0]);
 
         return {
-            altitude,
+            altitude : 1000*(1-rgbToHsl(currentCell)[0]),
             diffusionMatrix: [[NaN,NaN,NaN], [NaN, NaN, NaN], [NaN, NaN, NaN]]
         }
     }
@@ -170,12 +183,12 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
 
 export class CellularAutomataSource2 extends ImageSource {
 
-    private envConstructor: (images: ImageData[] | undefined, extent: Extent) => SpatialEnvironment<Lattice2D, Lattice2D>;
+    private envConstructor: (images: ImageData[] | undefined, size: Size, extent: Extent) => SpatialEnvironment<Lattice2D, Lattice2D>;
     private caEnv: SpatialEnvironment<Lattice2D, Lattice2D> | undefined;
     private renderedImage: ImageBase;
     private _renderingTime: number;
 
-    constructor(options: Options, envConstructor: (images: ImageData[], extent: Extent) => SpatialEnvironment<Lattice2D, Lattice2D>) {
+    constructor(options: Options, envConstructor: (images: ImageData[], size: Size, extent: Extent) => SpatialEnvironment<Lattice2D, Lattice2D>) {
         super(options);
         this.envConstructor = envConstructor;
     }
@@ -184,9 +197,9 @@ export class CellularAutomataSource2 extends ImageSource {
         return this._renderingTime;
     }
 
-    setInputImages(images: ImageData[] | undefined, extent: Extent) {
-        if (images && images.length > 0) {
-            this.caEnv = this.envConstructor(images, extent);
+    setInputImages(images: ImageData[] | undefined, size: Size | undefined, extent: Extent) {
+        if (size && images && images.length > 0) {
+            this.caEnv = this.envConstructor(images, size, extent);
         } else {
             this.caEnv = undefined;
         }
@@ -225,4 +238,22 @@ export class CellularAutomataSource2 extends ImageSource {
             }
         }
     }
+}
+
+
+export function createEnvironment<STATE_CELLTYPE, BASE_CELLTYPE>(
+    extent: Extent,
+    stateLattice: Lattice2D<STATE_CELLTYPE>,
+    baseLattice: Lattice2D<BASE_CELLTYPE>,
+    step: (currentState: Lattice2D<STATE_CELLTYPE>, baseLattice: Lattice2D<BASE_CELLTYPE>) => Lattice2D<STATE_CELLTYPE>,
+    renderFn: (state: Lattice2D<STATE_CELLTYPE>, base: Lattice2D<BASE_CELLTYPE>) => ImageData
+) {
+
+    return new SpatialEnvironment(
+        stateLattice,
+        baseLattice,
+        {step},
+        extent,
+        renderFn
+    );
 }

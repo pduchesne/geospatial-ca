@@ -1,5 +1,11 @@
 import { CellByCellAutomata, Lattice2D, Automata, BaseLattice2D, ImageDataLattice } from "./model";
-import { TerrainCellStatus, TerrainLattice, SpatialEnvironment } from "./spatial";
+import {
+    TerrainCellStatus,
+    TerrainLattice,
+    SpatialEnvironment,
+    TerrainCell,
+    AutomataDescriptor
+} from "./spatial";
 import { Extent } from "ol/extent";
 
 /**
@@ -47,8 +53,8 @@ export class WaterflowAutomata1 extends CellByCellAutomata<Lattice2D<TerrainCell
 /**
  * CA that does on the fly water diffusion computation
  */
-export class WaterflowAutomata2 implements Automata<Lattice2D<TerrainCellStatus>, TerrainLattice> {
-    step(currentState: Lattice2D<TerrainCellStatus>, baseLattice: TerrainLattice) {
+export class WaterflowAutomata2 implements Automata<Lattice2D<TerrainCellStatus>, Lattice2D<TerrainCell>> {
+    step(currentState: Lattice2D<TerrainCellStatus>, baseLattice: Lattice2D<TerrainCell>) {
         const newState = currentState.newInstance();
         currentState.forEach( (cell, x, y) => {
             this.processCell(x, y, currentState, newState, baseLattice);
@@ -57,7 +63,7 @@ export class WaterflowAutomata2 implements Automata<Lattice2D<TerrainCellStatus>
         return newState;
     };
 
-    processCell(x: number, y:number, currentState: Lattice2D<TerrainCellStatus>, newState: Lattice2D<TerrainCellStatus>, baseLattice: TerrainLattice) {
+    processCell(x: number, y:number, currentState: Lattice2D<TerrainCellStatus>, newState: Lattice2D<TerrainCellStatus>, baseLattice: Lattice2D<TerrainCell>) {
 
         const thisTerrainCell = baseLattice.get(x,y);
         const thisTerrainStateCell = currentState.get(x,y);
@@ -155,13 +161,13 @@ export class WaterflowAutomata2 implements Automata<Lattice2D<TerrainCellStatus>
 
 export class TerrainEnvironment extends SpatialEnvironment<Lattice2D<TerrainCellStatus>, TerrainLattice> {
 
-    constructor(image: ImageData, extent: Extent) {
+    constructor(images: ImageData[], extent: Extent) {
 
         const level2alpha = (level: number) => 1 - 1 / Math.pow(1 + level/5 , 2);
-
+        const demImage = images[0];
         super(
-            new BaseLattice2D<TerrainCellStatus>(image.width, image.height, (x, y) => ([0, Math.random()>.5 ? 0.4 : 0, [0,0]])),
-            TerrainLattice.createFromImages(image),
+            new BaseLattice2D<TerrainCellStatus>(demImage.width, demImage.height, (x, y) => ([0, Math.random()>.5 ? 0.4 : 0, [0,0]])),
+            TerrainLattice.createFromImages(demImage),
             new WaterflowAutomata2(),
             extent,
             (state, base) => {
@@ -171,5 +177,16 @@ export class TerrainEnvironment extends SpatialEnvironment<Lattice2D<TerrainCell
 
         console.log(`Terrain initialized with [${this.getBase().getHeight()},${this.getBase().getWidth()}] cells`);
     }
+}
 
+const automata = new WaterflowAutomata2();
+const level2alpha = (level: number) => 1 - 1 / Math.pow(1 + level/5 , 2);
+
+export const descriptor: AutomataDescriptor<TerrainCellStatus, TerrainCell> = {
+    stepFn: (state, base) => automata.step(state, base),
+    init: (images, size) => [
+        new BaseLattice2D(size[0], size[1],  (x, y) => ([0, Math.random()>.5 ? 0.4 : 0, [0,0]]) ),
+        TerrainLattice.createFromImages(images[0])
+    ],
+    renderFn: (state, base) => ImageDataLattice.fromLattice(state, (x, y, cell) => [0,0,255,level2alpha(cell[1])*255]).getData()
 }

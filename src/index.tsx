@@ -24,15 +24,21 @@ import Polygon from "ol/geom/Polygon";
 import VectorSource from "ol/source/Vector";
 import Feature from "ol/Feature";
 import MousePosition from "ol/control/MousePosition";
-import { TerrainCellStatus, TerrainCell, CellularAutomataSource2 } from 'ca/spatial';
-import { TerrainEnvironment } from 'ca/waterflow';
-//import Event from 'ol/events/Event';
-//import EventType from 'ol/events/EventType';
+import {
+    TerrainCellStatus,
+    TerrainCell,
+    CellularAutomataSource2,
+    ProjectDescriptor,
+    createEnvironment
+} from 'ca/spatial';
 
-import { editor } from "monaco-editor";
-import MonacoEditor from "react-monaco-editor";
 import { SizeMeasurer } from 'utils/ui';
 
+import * as lib from 'lib';
+import {CodeEditor} from "./code-editor";
+import Layer from "ol/layer/Layer";
+import {Extent} from "ol/extent";
+import {Size} from "ol/size";
 
 export const App = () => (
     <BrowserRouter>
@@ -70,37 +76,6 @@ export class RenderedImagesContainer extends raster.default {
     getImages() {
         return this.images;
     }
-}
-
-
-export function CodeEditor(props: {code: string, onCodeChange?: (code: string) => void, height?: string | number}) {
-    /*
-    const [editor, setEditor] = useState<editor.IStandaloneCodeEditor>();
-
-    const onEditorMount = useMemo(
-        () => 
-            (editor: editor.IStandaloneCodeEditor) => {
-                setEditor(editor);
-            }, 
-        []);
-        */
-        
-    const options = useMemo<editor.IEditorConstructionOptions>(() => ( {
-        selectOnLineNumbers: true,
-        roundedSelection: false,
-        readOnly: false,
-        cursorStyle: "line",
-        automaticLayout: false
-      } ), [])
-
-    return <MonacoEditor
-    height={props.height}
-    language="javascript"
-    value={props.code}
-    options={options}
-    onChange={props.onCodeChange}
-    //editorDidMount={onEditorMount}
-  />
 }
 
 export class CellularAutomataSource extends ImageCanvasSource {
@@ -158,6 +133,9 @@ export const MyMap = () => {
     const [selectedCell, setSelectedCell] = useState<{xy: [number, number], geom: Polygon, cell: [TerrainCellStatus, TerrainCell]}>();
     const [caState, setCaState] = useState<{iterationTime?: number, renderingtime?: number}>();
 
+    const [code, setCode] = useState<string>("// return an instance of ProjectDescriptor \n\nreturn null;");
+    const [projectDescriptor, setProjectDescriptor] = useState<ProjectDescriptor>();
+
     const [pendingIterations, setPendingIterations] = useState<number>(0);
 
     useEffect( () => {
@@ -166,34 +144,53 @@ export const MyMap = () => {
 
     const caImageSource = useMemo( () => {
 
-            //return new ImageImageData({ projection: 'EPSG:4326', imageExtent: [-180,-90,180,90] });
+            if (projectDescriptor) {
+                const envConstructor = (images: ImageData[], size: Size | undefined, extent: Extent) => {
 
-            const source = new CellularAutomataSource2(
-                {},
-                (images, extent) => new TerrainEnvironment(images[0], extent));
-            source.on("change", (evt) => {
-                setCaState({
-                    iterationTime: source.getEnv()?.lastIterationTime,
-                    renderingtime: source.renderingTime
-                });
-            })
+                    const [stateLattice, baseLattice] = projectDescriptor.init(images, size!);
 
-        return source;
+                    return createEnvironment(
+                        extent,
+                        stateLattice,
+                        baseLattice,
+                        projectDescriptor.stepFn,
+                        projectDescriptor.renderFn,
+                    );
+                }
 
+                const source = new CellularAutomataSource2(
+                    {},
+                    envConstructor);
+
+                source.on("change", (evt) => {
+                    setCaState({
+                        iterationTime: source.getEnv()?.lastIterationTime,
+                        renderingtime: source.renderingTime
+                    });
+                })
+
+                return source;
+            } else {
+                return undefined;
+            }
         } ,
-        [] );
+        [projectDescriptor] );
 
 
-    const imageSource = useMemo( () => {
-            //return new layer.Tile({source: new OSM()});
-            return  new layer.Tile({source: new TileWMS({
+    const imageSources = useMemo<Layer[]>( () => {
+        if (!projectDescriptor) return [];
+
+        return projectDescriptor.layers.map( (layerDescriptor) => {
+            // assume the layer URL is of the form <service_URL>#<layer_name>
+            const [url, layerName] = layerDescriptor.split('#');
+            return new layer.Tile({source: new TileWMS({
                     crossOrigin: 'Anonymous',
-                    url: 'https://geoservices.wallonie.be/arcgis/services/RELIEF/WALLONIE_MNT_2013_2014/MapServer/WMSServer',
-                    params: {'LAYERS': '0', 'TILED': true}
-                }) } );
-
+                    url,
+                    params: {'LAYERS': layerName, 'TILED': true}
+                }) } )
+        })
         },
-        [] );
+        [projectDescriptor] );
 
     const selectedFeatures = useMemo( () => {
             return new VectorSource();
@@ -201,25 +198,40 @@ export const MyMap = () => {
         [] );
 
     const imagesContainer = useMemo( () => {
-            const container = new RenderedImagesContainer({
-                sources: [imageSource]
-            });
-            return container;
-        } ,
-        [] );
+
+        const container = new RenderedImagesContainer({
+            sources: imageSources,
+
+        });
+        return container;
+    } ,
+    [imageSources] );
 
     const stepAutomata = (n: number) => {
         setPendingIterations(n);
     }
 
+    const selectExample = (name:string) => {
+        fetch("examples/"+name+".js").then(
+            (value) => {
+                value.text().then(setCode);
+            }
+        )
+    }
+
     const olmap = useMemo( () => {
+
+        if (mapDiv.current)
+            while (mapDiv.current.firstChild) {
+                mapDiv.current.removeChild(mapDiv.current.firstChild);
+            }
 
             const map = new Map({
                 controls: [new MousePosition()],
                 target: mapDiv.current || undefined,
                 layers: [
                     new layer.Tile({source: new OSM()}),
-                    imageSource,
+                    ...imageSources,
                     new layer.Image({
                         source: imagesContainer,
                         opacity: 0.5
@@ -257,14 +269,20 @@ export const MyMap = () => {
 
 
     useEffect( () => {
-        if (pendingIterations > 0) {
+        if (caImageSource && pendingIterations > 0) {
             caImageSource.stepAutomata(1);
             selectedCell && setSelectedCell(caImageSource.getEnv()?.getCellAtPixel(selectedCell.xy));
             setPendingIterations(pendingIterations-1);
         }
     }, [pendingIterations])
 
-    olmap.getLayers()//.item(0).
+
+    const evalCode = (code:string) => {
+        const scope = {lib};
+        const result: ProjectDescriptor = (new Function(...Object.keys(scope), code))(...Object.values(scope));
+
+        setProjectDescriptor(result);
+    };
 
     return <div>
         <div style={{display: "flex"}}>
@@ -276,11 +294,14 @@ export const MyMap = () => {
             </div>
             <div style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
 
-
+            <select onChange={(evt) => selectExample(evt.currentTarget.value)}>
+                <option>blank</option>
+                <option>waterflow1</option>
+            </select>
             <Tabs defaultActiveKey="controls" id="menu">
                 <Tab eventKey="controls" title="Controls">
                     <div>
-                        <button onMouseUp={() => caImageSource.setInputImages(imagesContainer.getImages(), olmap.getView().calculateExtent())}>SNAPSHOT</button>>
+                        <button onMouseUp={() => caImageSource && caImageSource.setInputImages(imagesContainer.getImages(), olmap.getSize(), olmap.getView().calculateExtent())}>SNAPSHOT</button>>
                         <button onMouseUp={() => stepAutomata(1)}>STEP</button>>
                         <button onMouseUp={() => stepAutomata(3)}>STEP50</button>>
                     </div>
@@ -300,9 +321,12 @@ export const MyMap = () => {
                     )}
                 </Tab>
                 <Tab eventKey="code" title="Code">
+                    <div onClick={() => evalCode(code)}>EVAL</div>
                     <SizeMeasurer>
                         {(props: {height: number, width: number} ) => (
-                            <CodeEditor code="// some test code" height={props.height-80}/>
+                            <CodeEditor code={code} height={props.height-80} onCodeChange={(code, event) => {
+                                setCode(code);
+                            }}/>
                         )} 
 
                     </SizeMeasurer>

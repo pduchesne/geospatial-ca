@@ -28,7 +28,7 @@ export const ReactControl = (props: {map: Map, children: React.ReactNode}) => {
         } else {
             controlWrapper.current = null;
         }
-    }, [containerRef.current])
+    }, [containerRef.current, map])
 
     if (map) {
         return <div ref={containerRef} className="ol-control">{children}</div>

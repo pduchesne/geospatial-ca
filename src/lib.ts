@@ -1,0 +1,9 @@
+import * as model from 'ca/model';
+import * as spatial from 'ca/spatial';
+import * as waterflow from 'ca/waterflow';
+import * as utils from 'color-utils';
+
+export { model };
+export { spatial };
+export { utils };
+export { waterflow };

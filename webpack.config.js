@@ -61,6 +61,11 @@ module.exports = {
                 test: /\.css$/,
                 use: [styleLoader, cssLoader]
             },
+
+            {
+                test: /\.scss$/,
+                use: [styleLoader, cssLoader, 'sass-loader']
+            },
             { // required for monaco editor
                 test: /\.ttf$/,
                 use: ["file-loader"]

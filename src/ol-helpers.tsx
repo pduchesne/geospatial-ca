@@ -52,8 +52,11 @@ export const LayerList = (props: {map: Map}) => {
         }
     }, [map]);
 
-    return <div style={{margin: '5px'}}>
-        {layers.map(layer => <LayerListItem layer={layer}/>)}
+    return <div className='ol-layer-list'>
+        {  layers
+            .filter(l => l.get('title') != undefined)
+            .map( (layer, idx) => <LayerListItem layer={layer} key={idx}/>)
+        }
     </div>
 
 }
@@ -70,5 +73,10 @@ export const LayerListItem = (props: {layer: BaseLayer}) => {
         }
     }, [layer]);
 
-    return <div>{layer.get('title') || '<no title>'} <span onClick={() => layer.setVisible(!visible)}>{visible?'ON':'OFF'}</span></div>
+    return <div className='ol-layer-list-item'>
+        <span className='layer-title'>{layer.get('title') || '<no title>'}</span>
+        <span className='layer-visibility'>
+            <input type="checkbox" checked={visible} onChange={ (e) => layer.setVisible(e.target.checked) } />
+        </span>
+    </div>
 }

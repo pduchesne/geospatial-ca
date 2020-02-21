@@ -8,19 +8,44 @@ import ImageSource, { Options } from "ol/source/Image";
 import Projection from "ol/proj/Projection";
 import {Size} from "ol/size";
 
+/**
+ * Defines a cellular automata : its init, step and render functions.
+ */
 export type AutomataDescriptor<STATECELL = any, BASECELL = never> = {
+    /**
+     * Initialize the CA state and base lattices from an array of ImageData
+     * @param images
+     * @param size
+     */
     init: (images: ImageData[], size: Size) => [Lattice2D<STATECELL>, LATTICETYPE<BASECELL>],
 
+    /**
+     * Runs one step of the CA
+     * @param currentState
+     * @param base
+     */
     stepFn: (currentState: Lattice2D<STATECELL>, base: LATTICETYPE<BASECELL>) => Lattice2D<STATECELL>,
 
+    /**
+     * Renders the current CA state into an image
+     * @param state
+     * @param base
+     */
     renderFn: (state: Lattice2D<STATECELL>, base: LATTICETYPE<BASECELL>) => ImageData
 }
 
+/**
+ * CA descriptor with added geospatial layers and extent
+ */
 export type ProjectDescriptor<STATECELL = any, BASECELL = never> = AutomataDescriptor<STATECELL, BASECELL> & {
     layers: string[],
     extent: [number, number, number, number]
 }
 
+
+/**
+ * CA Environment with geospatial features
+ */
 export class SpatialEnvironment<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | never> extends Environment<STATELATTICE, BASELATTICE> {
     private extent: Extent;
     private cellSpatialWidth: number;
@@ -181,14 +206,19 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     }
 }
 
-export class CellularAutomataSource2 extends ImageSource {
+/**
+ * Constructor function that builds a SpatialEnvironment from an array of ImageData and a spatial extent
+ */
+export type SpatialEnvironmentConstructor = (images: ImageData[], size: Size, extent: Extent) => SpatialEnvironment<Lattice2D, Lattice2D>
 
-    private envConstructor: (images: ImageData[] | undefined, size: Size, extent: Extent) => SpatialEnvironment<Lattice2D, Lattice2D>;
+export class CellularAutomataSource extends ImageSource {
+
+    private envConstructor: SpatialEnvironmentConstructor;
     private caEnv: SpatialEnvironment<Lattice2D, Lattice2D> | undefined;
     private renderedImage: ImageBase;
     private _renderingTime: number;
 
-    constructor(options: Options, envConstructor: (images: ImageData[], size: Size, extent: Extent) => SpatialEnvironment<Lattice2D, Lattice2D>) {
+    constructor(options: Options, envConstructor: SpatialEnvironmentConstructor) {
         super(options);
         this.envConstructor = envConstructor;
     }
@@ -238,22 +268,4 @@ export class CellularAutomataSource2 extends ImageSource {
             }
         }
     }
-}
-
-
-export function createEnvironment<STATE_CELLTYPE, BASE_CELLTYPE>(
-    extent: Extent,
-    stateLattice: Lattice2D<STATE_CELLTYPE>,
-    baseLattice: Lattice2D<BASE_CELLTYPE>,
-    step: (currentState: Lattice2D<STATE_CELLTYPE>, baseLattice: Lattice2D<BASE_CELLTYPE>) => Lattice2D<STATE_CELLTYPE>,
-    renderFn: (state: Lattice2D<STATE_CELLTYPE>, base: Lattice2D<BASE_CELLTYPE>) => ImageData
-) {
-
-    return new SpatialEnvironment(
-        stateLattice,
-        baseLattice,
-        {step},
-        extent,
-        renderFn
-    );
 }

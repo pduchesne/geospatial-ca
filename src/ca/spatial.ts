@@ -39,7 +39,7 @@ export type AutomataDescriptor<STATECELL = any, BASECELL = never> = {
  */
 export type ProjectDescriptor<STATECELL = any, BASECELL = never> = AutomataDescriptor<STATECELL, BASECELL> & {
     layers: string[],
-    extent: [number, number, number, number]
+    extent?: [number, number, number, number]
 }
 
 

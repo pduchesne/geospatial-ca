@@ -66,10 +66,10 @@ module.exports = {
                 test: /\.scss$/,
                 use: [styleLoader, cssLoader, 'sass-loader']
             },
-            { // required for monaco editor
-                test: /\.ttf$/,
+            { // required for monaco editor and font-awesome
+                test: /\.(jpe?g|png|gif|svg|json|ico|woff(2)?|ttf|eot)(\?v=\d+\.\d+\.\d+)?$/,
                 use: ["file-loader"]
-              }
+            }
         ]
     },
     // this will create a development server to host our application

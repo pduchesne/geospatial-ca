@@ -3,7 +3,7 @@ import * as React from 'react';
 import { BrowserRouter, Route } from 'react-router-dom';
 import { Map, View } from 'ol';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { Tabs, Tab} from 'react-bootstrap';
+import { Tab} from 'react-bootstrap';
 import 'ol/ol.css';
 import 'ol-ca.scss';
 import { useState, useRef, useMemo, useEffect } from 'react';
@@ -33,6 +33,12 @@ import {CodeEditor} from "./code-editor";
 import Layer from "ol/layer/Layer";
 import {Options as TileOptions} from "ol/layer/Tile";
 import {Options as ImageOptions} from "ol/layer/Image";
+import Nav from "react-bootstrap/Nav";
+import '@fortawesome/fontawesome-free/scss/solid.scss';
+import '@fortawesome/fontawesome-free/scss/regular.scss';
+import '@fortawesome/fontawesome-free/scss/brands.scss';
+import '@fortawesome/fontawesome-free/scss/fontawesome.scss';
+import {transformExtent} from "ol/proj";
 
 export const App = () => (
     <BrowserRouter>
@@ -71,6 +77,27 @@ export class RenderedImagesContainer extends raster.default {
     }
 }
 
+enum CodeStatus {
+    'OK',
+    'DIRTY',
+    'ERROR',
+}
+
+const CodeEvalButton = (props: {status: CodeStatus, evalFn: () => void} & React.HTMLAttributes<HTMLElement>) => {
+
+    const {status, evalFn, ...rest} = props;
+
+
+    switch (status) {
+        case CodeStatus.DIRTY:
+            return <i className={"fas fa-play"} onClick={evalFn} {...rest}></i>
+        case CodeStatus.OK:
+            return <i className={"fas fa-check"} {...rest} style={{...rest.style, color: 'green'}}></i>
+        case CodeStatus.ERROR:
+            return <i className={"fas fa-times"} {...rest} style={{...rest.style, color: 'red'}}></i>
+    }
+}
+
 /**
  * Main map component for the application
  * @constructor
@@ -92,7 +119,9 @@ export const MyMap = () => {
     // state variable for the name of the currently loaded script
     const [scriptName, setScriptName] = useState<string>();
     // state variable for the CA script
-    const [code, setCode] = useState<string>("// return an instance of ProjectDescriptor \n\nreturn null;");
+    const [code, setCode] = useState<string>("");
+    // state variable for the code evaluation status. OK : evaluation correct; DIRTY : code has changed ; ERROR : code evaluation caused an error .
+    const [codeStatus, setCodeStatus] = useState<CodeStatus>(CodeStatus.OK);
     // state variable for the project descriptor that results from the CA script code evaluation
     const [projectDescriptor, setProjectDescriptor] = useState<ProjectDescriptor>();
 
@@ -195,9 +224,13 @@ export const MyMap = () => {
                 }
             )
         } else {
-            const defaultCode = "// return an instance of ProjectDescriptor \n\nreturn null;";
-            setCode(defaultCode);
-            evalCode(defaultCode);
+            fetch("examples/blank.js").then(
+                (value) => {
+                    value.text().then(code => {
+                        setCode(code);
+                    });
+                }
+            )
         }
     }
 
@@ -253,6 +286,13 @@ export const MyMap = () => {
             view: new View(viewOptions)
         });
 
+        if (projectDescriptor?.extent) {
+            // hardcoded transform into Mercator. This assumes the basemap is in Mercator (like OSM)
+            // TODO adjust transform on the actual map projection
+            const mapExtent = transformExtent(projectDescriptor.extent, "EPSG:4326", "EPSG:3857");
+            map.getView().fit(mapExtent);
+        }
+
         // On click on the map, set the state selectedCell to the clicked cell on the map
         map.on('singleclick', function (evt) {
             map.forEachLayerAtPixel(evt.pixel, function(layer) {
@@ -286,7 +326,7 @@ export const MyMap = () => {
         }
     }, [pendingIterations])
 
-    // once after the first rendering, initialize the map view options
+    // once after the first rendering, initialize the script and the view options
     useEffect( () => {
         setViewOptions( { center: [0, 0], zoom: 1 } );
 
@@ -298,15 +338,27 @@ export const MyMap = () => {
         selectExample(scriptName);
     }, [scriptName]);
 
+    useEffect( () => {
+        setCodeStatus(CodeStatus.DIRTY);
+    }, [code]);
+
     /**
      * Evaluate a project descriptor script and set it as the current projectDescriptor
      * @param code
      */
     const evalCode = (code:string) => {
-        const scope = {lib};
-        const result: ProjectDescriptor = (new Function(...Object.keys(scope), code))(...Object.values(scope));
+        try {
+            const scope = {lib};
+            const result: ProjectDescriptor = (new Function(...Object.keys(scope), code))(...Object.values(scope));
 
-        setProjectDescriptor(result);
+            setProjectDescriptor(result);
+            setCodeStatus(CodeStatus.OK);
+        } catch (err) {
+            // TODO log error in code editor
+            console.log(err);
+            setCodeStatus(CodeStatus.ERROR);
+        }
+
     };
 
     return <div className='mainApp'>
@@ -324,56 +376,115 @@ export const MyMap = () => {
                 </SizeMeasurer>
             </div>
             <div className='controlsPanel'>
-                <div>
-                    Select example
-                    <select value={scriptName} onChange={(evt) => setScriptName(evt.currentTarget.value)}>
-                        <option value="">blank</option>
-                        <option>conway</option>
-                        <option>waterflow1</option>
-                    </select>
-                </div>
-                <div>
-                    <Tabs defaultActiveKey="controls" id="menu">
-                        <Tab eventKey="controls" title="Controls">
-                            <div>
-                                <button onClick={() => caImageSource && caImageSource.setInputImages(
-                                    imagesContainer ? imagesContainer.getImages(): [],
-                                    olmap.getSize(),
-                                    olmap.getView().calculateExtent())}>SNAPSHOT</button>>
-                                <button onClick={() => stepAutomata(1)}>STEP</button>>
-                                <button onClick={() => stepAutomata(3)}>STEP50</button>>
-                            </div>
-                            <div>
-                                Perf CA {caState?.iterationTime} ; Perf Render {caState?.renderingtime}
-                            </div>
+                <div style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
+                    <Tab.Container defaultActiveKey="controls" id="menu">
+                        <Nav variant={"tabs"}>
+                            <select value={scriptName} onChange={(evt) => setScriptName(evt.currentTarget.value)}>
+                                <option value="">blank</option>
+                                <option>conway</option>
+                                <option>waterflow1</option>
+                            </select>
+                            <Nav.Item>
+                                <Nav.Link eventKey="controls">Controls</Nav.Link>
+                            </Nav.Item>
+                            <Nav.Item>
+                                <Nav.Link eventKey="code">
+                                    Code
+                                    <CodeEvalButton status={codeStatus} evalFn={() => evalCode(code)} style={{marginLeft: 5}}/>
+                                </Nav.Link>
+                            </Nav.Item>
+                        </Nav>
+                        <Tab.Content>
+                            <Tab.Pane eventKey="controls">
+                                <div>
+                                    <button onClick={() => caImageSource && caImageSource.setInputImages(
+                                        imagesContainer ? imagesContainer.getImages(): [],
+                                        olmap.getSize(),
+                                        olmap.getView().calculateExtent())}>SNAPSHOT</button>>
+                                    <button onClick={() => stepAutomata(1)}>STEP</button>>
+                                    <button onClick={() => stepAutomata(3)}>STEP50</button>>
+                                </div>
+                                <div>
+                                    Perf CA {caState?.iterationTime} ; Perf Render {caState?.renderingtime}
+                                </div>
 
-                            {selectedCell && (
-                                <>
-                                <table>
-                                    <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
-                                    <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
-                                    <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
-                                </table>
-                                    <MatrixDisplay matrix={selectedCell.cell[0][3]}/>
-                                </>
-                            )}
-                        </Tab>
-                        <Tab eventKey="code" title="Code">
-                            <div onClick={() => evalCode(code)}>EVAL</div>
-                            <SizeMeasurer>
-                                {(props: {height: number, width: number} ) => (
-                                    <CodeEditor code={code} height={props.height-80} onCodeChange={(code, event) => {
-                                        setCode(code);
-                                    }}/>
+                                {selectedCell && (
+                                    <>
+                                        <table>
+                                            <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
+                                            <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
+                                            <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
+                                        </table>
+                                        <MatrixDisplay matrix={selectedCell.cell[0][3]}/>
+                                    </>
                                 )}
-
-                            </SizeMeasurer>
-                        </Tab>
-                    </Tabs>
+                            </Tab.Pane>
+                            <Tab.Pane eventKey="code">
+                                <SizeMeasurer>
+                                    {(props: {height: number, width: number} ) => (
+                                        <CodeEditor code={code} height={props.height} onCodeChange={(code, event) => {
+                                            setCode(code);
+                                        }}/>
+                                    )}
+                                </SizeMeasurer>
+                            </Tab.Pane>
+                        </Tab.Content>
+                    </Tab.Container>
                 </div>
             </div>
         </div>
 }
+
+
+/*
+ <Tab.Container defaultActiveKey="controls" id="menu">
+                        <Nav>
+                            <Nav.Item>
+                                <Nav.Link eventKey="controls">Controls</Nav.Link>
+                            </Nav.Item>
+                            <Nav.Item>
+                                <Nav.Link eventKey="code">Code</Nav.Link>
+                            </Nav.Item>
+                        </Nav>
+                        <Tab.Content>
+                            <Tab.Pane eventKey="controls">
+                                <div>
+                                    <button onClick={() => caImageSource && caImageSource.setInputImages(
+                                        imagesContainer ? imagesContainer.getImages(): [],
+                                        olmap.getSize(),
+                                        olmap.getView().calculateExtent())}>SNAPSHOT</button>>
+                                    <button onClick={() => stepAutomata(1)}>STEP</button>>
+                                    <button onClick={() => stepAutomata(3)}>STEP50</button>>
+                                </div>
+                                <div>
+                                    Perf CA {caState?.iterationTime} ; Perf Render {caState?.renderingtime}
+                                </div>
+
+                                {selectedCell && (
+                                    <>
+                                        <table>
+                                            <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
+                                            <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
+                                            <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
+                                        </table>
+                                        <MatrixDisplay matrix={selectedCell.cell[0][3]}/>
+                                    </>
+                                )}
+                            </Tab.Pane>
+                            <Tab.Pane eventKey="code">
+                                <div onClick={() => evalCode(code)}>EVAL</div>
+                                <SizeMeasurer>
+                                    {(props: {height: number, width: number} ) => (
+                                        <CodeEditor code={code} height={props.height-80} onCodeChange={(code, event) => {
+                                            setCode(code);
+                                        }}/>
+                                    )}
+
+                                </SizeMeasurer>
+                            </Tab.Pane>
+                        </Tab.Content>
+                    </Tab.Container>
+ */
 
 export const MatrixDisplay = (props: {matrix?: number[][]}) => {
     const {matrix} = props;

@@ -114,7 +114,7 @@ export const MyMap = () => {
     const [selectedCell, setSelectedCell] = useState<{xy: [number, number], geom: Polygon, cell: [TerrainCellStatus, TerrainCell]}>();
 
     // state variable for the CA rendering state
-    const [caState, setCaState] = useState<{iterationTime?: number, renderingtime?: number}>();
+    const [caState, setCaState] = useState<{iterationTime?: number, renderingtime?: number, totalSteps: number}>();
 
     // state variable for the name of the currently loaded script
     const [scriptName, setScriptName] = useState<string>();
@@ -124,6 +124,9 @@ export const MyMap = () => {
     const [codeStatus, setCodeStatus] = useState<CodeStatus>(CodeStatus.OK);
     // state variable for the project descriptor that results from the CA script code evaluation
     const [projectDescriptor, setProjectDescriptor] = useState<ProjectDescriptor>();
+
+    // state variable for the number of steps per click
+    const [stepNb, setStepNb] = useState<number>(1);
 
     const [pendingIterations, setPendingIterations] = useState<number>(0);
 
@@ -155,7 +158,8 @@ export const MyMap = () => {
                 source.on("change", (evt) => {
                     setCaState({
                         iterationTime: source.getEnv()?.lastIterationTime,
-                        renderingtime: source.renderingTime
+                        renderingtime: source.renderingTime,
+                        totalSteps: source.getEnv()?.totalSteps || 0
                     });
                 })
 
@@ -397,15 +401,29 @@ export const MyMap = () => {
                         <Tab.Content>
                             <Tab.Pane eventKey="controls">
                                 <div>
-                                    <button onClick={() => caImageSource && caImageSource.setInputImages(
+                                    <div>
+                                        <button onClick={() => caImageSource?.setInputImages(
                                         imagesContainer ? imagesContainer.getImages(): [],
                                         olmap.getSize(),
-                                        olmap.getView().calculateExtent())}>SNAPSHOT</button>>
-                                    <button onClick={() => stepAutomata(1)}>STEP</button>>
-                                    <button onClick={() => stepAutomata(3)}>STEP50</button>>
-                                </div>
-                                <div>
-                                    Perf CA {caState?.iterationTime} ; Perf Render {caState?.renderingtime}
+                                        olmap.getView().calculateExtent())}>
+                                            Init CA</button>
+                                        {caImageSource?.getEnv() ? "Initialized" : "" }
+                                    </div>
+                                    {caImageSource?.getEnv() && (
+                                        <>
+                                        <div>
+                                            <button onClick={
+                                                (e) =>
+                                                    (e.target as HTMLElement).tagName.toLowerCase() == 'button' && stepAutomata(stepNb)
+                                            }>
+                                                Step <input style={{width: "3em"}} type="number" value={stepNb} onChange={e => setStepNb(e.target.valueAsNumber)} />
+                                            </button>
+                                            {caState?.totalSteps != undefined && <span>{caState?.totalSteps} steps; last iteration : {caState?.iterationTime}ms</span> }
+                                        </div>
+                                        </>
+                                    )
+                                    }
+
                                 </div>
 
                                 {selectedCell && (

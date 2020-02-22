@@ -221,6 +221,10 @@ export class CellularAutomataSource extends ImageSource {
     constructor(options: Options, envConstructor: SpatialEnvironmentConstructor) {
         super(options);
         this.envConstructor = envConstructor;
+
+        this.on("stateChange", () => {
+            this.renderOutput();
+        })
     }
 
     get renderingTime(): number {
@@ -233,7 +237,8 @@ export class CellularAutomataSource extends ImageSource {
         } else {
             this.caEnv = undefined;
         }
-        this.renderOutput();
+
+        this.dispatchEvent("stateChange");
     }
 
     getEnv() {
@@ -263,8 +268,7 @@ export class CellularAutomataSource extends ImageSource {
         if (this.caEnv) {
             for (let i=0;i<n;i++)  {
                 this.caEnv.applyAutomata();
-                //this.handleImageChange(new Event(EventType.CHANGE));
-                this.renderOutput();
+                this.dispatchEvent("stateChange");
             }
         }
     }

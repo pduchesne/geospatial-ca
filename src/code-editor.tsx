@@ -81,5 +81,6 @@ export function CodeEditor(props: {code: string, onCodeChange?: ChangeHandler, h
         onChange={props.onCodeChange}
         editorDidMount={ (editor, monaco) => {monaco.editor.getModelMarkers({})} }
         editorWillMount={ editorWillMount }
+        theme="vs-dark"
     /> : null;
 }

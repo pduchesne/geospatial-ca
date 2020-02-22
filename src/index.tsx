@@ -47,7 +47,7 @@ export const App = () => (
                 exact
                 path="/"
                 render={props => {
-                    return <MyMap />
+                    return <MainPage />
                 }
                 }
             />
@@ -102,7 +102,7 @@ const CodeEvalButton = (props: {status: CodeStatus, evalFn: () => void} & React.
  * Main map component for the application
  * @constructor
  */
-export const MyMap = () => {
+export const MainPage = () => {
 
     // div container that will hold the OL map
     const mapDiv = useRef<HTMLDivElement>(null);
@@ -129,6 +129,9 @@ export const MyMap = () => {
     const [stepNb, setStepNb] = useState<number>(1);
 
     const [pendingIterations, setPendingIterations] = useState<number>(0);
+
+    // state variable for execution error
+    const [error, setError] = useState<string>();
 
 
     // memoized OL ImageSource that encapsulates the CA
@@ -284,7 +287,12 @@ export const MyMap = () => {
         );
 
         const map = new Map({
-            controls: [new MousePosition({coordinateFormat: p => p ? p.map(coord => coord.toFixed(2)).join(',') : '' })],
+            controls: [
+                new MousePosition({
+                        coordinateFormat: p => p ? p.map(coord => coord.toFixed(2)).join(',') : '' ,
+                        className: 'ol-control ol-mouse-position'
+                })
+            ],
             target: mapDiv.current || undefined,
             layers,
             view: new View(viewOptions)
@@ -324,9 +332,14 @@ export const MyMap = () => {
 
     useEffect( () => {
         if (caImageSource && pendingIterations > 0) {
-            caImageSource.stepAutomata(1);
-            selectedCell && setSelectedCell(caImageSource.getEnv()?.getCellAtPixel(selectedCell.xy));
-            setPendingIterations(pendingIterations-1);
+            try {
+                caImageSource.stepAutomata(1);
+                selectedCell && setSelectedCell(caImageSource.getEnv()?.getCellAtPixel(selectedCell.xy));
+                setPendingIterations(pendingIterations - 1);
+            } catch (err) {
+                setPendingIterations(0);
+                handleError(err);
+            }
         }
     }, [pendingIterations])
 
@@ -357,13 +370,33 @@ export const MyMap = () => {
 
             setProjectDescriptor(result);
             setCodeStatus(CodeStatus.OK);
+            setError(undefined);
         } catch (err) {
-            // TODO log error in code editor
-            console.log(err);
-            setCodeStatus(CodeStatus.ERROR);
+            handleError(err);
         }
 
     };
+
+    const handleError = (err: any) => {
+        setCodeStatus(CodeStatus.ERROR);
+        if (err instanceof Error) {
+            setError(err.message);
+        } else {
+            setError(err.toString());
+        }
+        console.warn(err);
+    }
+
+    const initCAWithImages = () => {
+        try {
+            caImageSource?.setInputImages(
+                imagesContainer ? imagesContainer.getImages() : [],
+                olmap.getSize(),
+                olmap.getView().calculateExtent())
+        } catch (err) {
+            handleError(err);
+        }
+    }
 
     return <div className='mainApp'>
             <div className='mapPanel'>
@@ -383,7 +416,9 @@ export const MyMap = () => {
                 <div style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
                     <Tab.Container defaultActiveKey="controls" id="menu">
                         <Nav variant={"tabs"}>
-                            <select value={scriptName} onChange={(evt) => setScriptName(evt.currentTarget.value)}>
+                            <select style={{marginBottom: 3}}
+                                    value={scriptName}
+                                    onChange={(evt) => setScriptName(evt.currentTarget.value)}>
                                 <option value="">blank</option>
                                 <option>conway</option>
                                 <option>waterflow1</option>
@@ -400,44 +435,46 @@ export const MyMap = () => {
                         </Nav>
                         <Tab.Content>
                             <Tab.Pane eventKey="controls">
-                                <div>
-                                    <div>
-                                        <button onClick={() => caImageSource?.setInputImages(
-                                        imagesContainer ? imagesContainer.getImages(): [],
-                                        olmap.getSize(),
-                                        olmap.getView().calculateExtent())}>
-                                            Init CA</button>
+                                <div className="controls-actions">
+                                    <div className="controls-action">
+                                        <button onClick={initCAWithImages}>
+                                            Init CA
+                                        </button>
                                         {caImageSource?.getEnv() ? "Initialized" : "" }
                                     </div>
                                     {caImageSource?.getEnv() && (
-                                        <>
-                                        <div>
+                                        <div className="controls-action">
                                             <button onClick={
                                                 (e) =>
                                                     (e.target as HTMLElement).tagName.toLowerCase() == 'button' && stepAutomata(stepNb)
-                                            }>
+                                                }
+                                            >
                                                 Step <input style={{width: "3em"}} type="number" value={stepNb} onChange={e => setStepNb(e.target.valueAsNumber)} />
                                             </button>
                                             {caState?.totalSteps != undefined && <span>{caState?.totalSteps} steps; last iteration : {caState?.iterationTime}ms</span> }
                                         </div>
-                                        </>
                                     )
                                     }
 
                                 </div>
 
                                 {selectedCell && (
-                                    <>
+                                    <div className="controls-status">
                                         <table>
                                             <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
                                             <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
                                             <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
                                         </table>
                                         <MatrixDisplay matrix={selectedCell.cell[0][3]}/>
-                                    </>
+                                    </div>
                                 )}
                             </Tab.Pane>
                             <Tab.Pane eventKey="code">
+                                {error && (
+                                    <div className="error">
+                                        {error}
+                                    </div>
+                                )}
                                 <SizeMeasurer>
                                     {(props: {height: number, width: number} ) => (
                                         <CodeEditor code={code} height={props.height} onCodeChange={(code, event) => {

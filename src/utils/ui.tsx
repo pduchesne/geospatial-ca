@@ -1,6 +1,7 @@
 import Measure, { ContentRect, MeasuredComponentProps } from 'react-measure';
 import * as React from 'react';
-import { useState } from 'react';
+import {useState} from 'react';
+import {PromiseState} from "./hooks";
 
 type SizeMeasurerProps = {
     children: (arg: { height: number; width: number }) => React.ReactNode;
@@ -53,3 +54,49 @@ export const SizeMeasurer = ({ children, disableWidth, disableHeight, onResize }
         </Measure>
     );
 };
+
+export function renderPromiseState<R>(
+    state: PromiseState<R>,
+    children: (result: R) => React.ReactElement | null,
+    errorFn?: (error: string) => React.ReactElement | null
+): React.ReactElement | null {
+    if (state.done) {
+        if (state.success) {
+            return children(state.result);
+        } else {
+            let msg;
+            if (state.error instanceof Error) {
+                console.warn(state.error);
+                msg = state.error.message;
+            } else {
+                msg = state.error && state.error.toString();
+            }
+            return errorFn ? errorFn(msg) :   <ErrorMessage message={msg}/>;
+        }
+    } else {
+        return <Spinner />;
+    }
+}
+
+export const ErrorMessage = (props: {message: string}) => {
+    return <div className="error">${props.message}</div>
+}
+
+export const Spinner = () => {
+    return <div className="lds-ellipsis">
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+    </div>
+}
+
+/*
+export function VisualPromiseContainer<R>(props: {
+  promise: Promise<R>,
+  children: (result: R) => React.ReactElement | null
+}): React.ReactElement | null {
+    const promiseState = usePromise(props.promise);
+    return renderObservableState(promiseState, props.children);
+}
+ */

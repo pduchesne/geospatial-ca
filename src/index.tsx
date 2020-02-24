@@ -6,13 +6,12 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { Tab} from 'react-bootstrap';
 import 'ol/ol.css';
 import 'ol-ca.scss';
-import { useState, useRef, useMemo, useEffect } from 'react';
+import {useState, useRef, useMemo, useEffect, useContext} from 'react';
 import OSM from 'ol/source/OSM';
 import * as raster from 'ol/source/Raster';
 //import ImageStatic from 'ol/source/ImageStatic';
 import * as layer from 'ol/layer';
 import { ViewOptions } from 'ol/View';
-import { TileWMS } from 'ol/source';
 import {ReactControl, LayerList} from "./ol-helpers";
 import Polygon from "ol/geom/Polygon";
 import VectorSource from "ol/source/Vector";
@@ -26,7 +25,7 @@ import {
     SpatialEnvironmentConstructor, SpatialEnvironment
 } from 'ca/spatial';
 
-import { SizeMeasurer } from 'utils/ui';
+import {ErrorMessage, renderPromiseState, SizeMeasurer} from 'utils/ui';
 
 import * as lib from 'lib';
 import {CodeEditor} from "./code-editor";
@@ -39,20 +38,32 @@ import '@fortawesome/fontawesome-free/scss/regular.scss';
 import '@fortawesome/fontawesome-free/scss/brands.scss';
 import '@fortawesome/fontawesome-free/scss/fontawesome.scss';
 import {transformExtent} from "ol/proj";
+import {CkanClient, PackageDict, ResourceDict} from "./utils/ckan";
+import WMSCapabilities from "ol/format/WMSCapabilities";
+import {fetchParseError, proxify_url} from "./utils/net";
+import {usePromiseFn} from 'utils/hooks';
+import TileWMS from "ol/source/TileWMS";
+
+
+const AppContext = React.createContext<{proxy_url?: string}>({
+    proxy_url: undefined
+});
 
 export const App = () => (
-    <BrowserRouter>
-        <div>
-            <Route
-                exact
-                path="/"
-                render={props => {
-                    return <MainPage />
-                }
-                }
-            />
-        </div>
-    </BrowserRouter>
+    <AppContext.Provider value={ {proxy_url: "https://demo.highlatitud.es/proxy" } }>
+        <BrowserRouter>
+            <div>
+                <Route
+                    exact
+                    path="/"
+                    render={props => {
+                        return <MainPage />
+                    }
+                    }
+                />
+            </div>
+        </BrowserRouter>
+    </AppContext.Provider>
 )
 
 export class RenderedImagesContainer extends raster.default {
@@ -182,14 +193,26 @@ export const MainPage = () => {
         return projectDescriptor.layers.map( (layerDescriptor) => {
             // assume the layer URL is of the form <service_URL>#<layer_name>
             const [url, layerName] = layerDescriptor.split('#');
+
+            /*
+            return new ImageLayer({
+                source: new ImageWMS({
+                    crossOrigin: 'Anonymous',
+                    url: stripOGCParams(url).href,
+                    params: {'LAYERS': layerName}
+                })
+            })
+             */
+
             return new layer.Tile({
                 source: new TileWMS({
                     crossOrigin: 'Anonymous',
-                    url,
-                    params: {'LAYERS': layerName, 'TILED': true}
+                    url: stripOGCParams(url).href,
+                    params: {'LAYERS': layerName, 'TILED': false}
                 }),
                 title: 'Source '+layerName
-            } as TileOptions )
+            } as TileOptions );
+
         })
         },
         [projectDescriptor] );
@@ -432,6 +455,11 @@ export const MainPage = () => {
                                     <CodeEvalButton status={codeStatus} evalFn={() => evalCode(code)} style={{marginLeft: 5}}/>
                                 </Nav.Link>
                             </Nav.Item>
+                            <Nav.Item>
+                                <Nav.Link eventKey="datasearch">
+                                    Search data
+                                </Nav.Link>
+                            </Nav.Item>
                         </Nav>
                         <Tab.Content>
                             <Tab.Pane eventKey="controls">
@@ -483,11 +511,213 @@ export const MainPage = () => {
                                     )}
                                 </SizeMeasurer>
                             </Tab.Pane>
+                            <Tab.Pane eventKey="datasearch">
+                                <DataSearchPanel/>
+                            </Tab.Pane>
                         </Tab.Content>
                     </Tab.Container>
                 </div>
             </div>
         </div>
+}
+
+export const CkanSearch = (props: {ckanUrl: string, searchStr?: string}) => {
+
+    const appCtx = useContext(AppContext);
+
+    const ckanClient = useMemo(
+        () => new CkanClient(props.ckanUrl, appCtx.proxy_url ? ((url: URL) => proxify_url(url, appCtx.proxy_url!)) : undefined ),
+        [props.ckanUrl]);
+
+    const ckanResult$ = usePromiseFn(
+        () => ckanClient.package_search({fq: 'res_format:(WMS OR wms)', q:props.searchStr}).then(r => r.results),
+        [ckanClient, props.searchStr]);
+
+    return <div>
+        { renderPromiseState(
+            ckanResult$,
+            (results) => <div>
+                {results && results.map ( (r,idx) =>
+                    <div key={idx}><ResultLine package={r} resource={r.resources.find(r => r.format.toUpperCase() == 'WMS')}/></div>
+                )}
+            </div>)
+        }
+    </div>
+}
+
+export const ResultLine = (props: {resource?: ResourceDict, package: PackageDict}) => {
+
+    const [showDetails, setShowDetails] = useState<boolean>();
+
+    return <div>
+        <div onClick={() => setShowDetails(!showDetails)} style={{whiteSpace: "nowrap"}}>
+            <span style={{fontFamily: "monospace", fontSize: "80%"}}>[{props.resource?.format}]</span>
+            {props.package.title || props.package.name}
+        </div>
+        {showDetails && props.resource && (
+            <WMSLayers wms_url={props.resource.url} name_filter={props.package.title || props.package.name}/>
+        )}
+    </div>
+}
+
+function stripOGCParams(url_str: string) {
+
+    const paramsToRemove = ['request','service','version','layers'];
+    const url = new URL(url_str);
+    url.searchParams.forEach( (value, key, parent) => {
+        if (paramsToRemove.indexOf(key.toLowerCase()) >= 0)
+            parent.delete(key);
+    }  );
+
+    return url;
+}
+
+export type WMSCapabilities_Layer = {
+    "Name"?: string,
+    "Title"?: string,
+    "Abstract"?: string,
+    "CRS": string[],
+    "EX_GeographicBoundingBox": [number, number, number, number],
+    "BoundingBox": {
+        "crs": string,
+        "extent": [number, number, number, number],
+        "res": [number | null, number | null]
+    }[],
+    "Style": {
+        "Name": string,
+        "Title"?: string,
+        "LegendURL": {
+            "Format": string,
+            "OnlineResource": string,
+            "size": [number, number]
+        }[]
+    }[],
+    "queryable": boolean,
+    "opaque": boolean,
+    "noSubsets": boolean
+    "Layer"?: WMSCapabilities_Layer[]
+}
+
+export type ParsedWMSCapabilities = {
+    "version": string,
+    "Service": {
+        "Name": string,
+        "Title"?: string,
+        "Abstract"?: string,
+        "KeywordList": string[],
+        "OnlineResource": string,
+        "ContactInformation": {
+            "ContactPersonPrimary"?: {"ContactPerson": string, "ContactOrganization": string},
+            "ContactPosition"?: string,
+            "ContactAddress"?: {
+                "AddressType"?: string,
+                "Address"?: string,
+                "City"?: string,
+                "StateOrProvince"?: string,
+                "PostCode"?: string,
+                "Country"?: string
+            },
+            "ContactVoiceTelephone"?: string,
+            "ContactFacsimileTelephone"?: string,
+            "ContactElectronicMailAddress"?: string
+        },
+        "Fees"?: string,
+        "AccessConstraints"?: string,
+        "MaxWidth"?: number,
+        "MaxHeight"?: number
+    },
+    "Capability": {
+        "Request": {
+            [requestName: string]: {
+                "Format": string[],
+                "DCPType": {
+                    "HTTP": { [HttpMethod: string]: { "OnlineResource": string}}}[]
+            }
+        },
+        "Exception": string[],
+        "Layer": WMSCapabilities_Layer
+    }
+}
+
+export const WMSLayers = (props: {wms_url: string, name_filter?: string}) => {
+
+    const appCtx = useContext(AppContext);
+    const [showAll, setShowAll] = useState<boolean>(false);
+
+    const strippedUrl = useMemo( () => stripOGCParams(props.wms_url), [props.wms_url]);
+
+    const capabilitiesUrl = useMemo( () => {
+        const capabilitiesUrl = new URL(strippedUrl.href);
+        capabilitiesUrl.searchParams.set("request", "GetCapabilities");
+        capabilitiesUrl.searchParams.set("service", "WMS");
+        return capabilitiesUrl;
+    }, [strippedUrl]);
+
+    const capabilities$ = usePromiseFn(
+        () => {
+            const parser = new WMSCapabilities();
+            return fetchParseError(proxify_url(capabilitiesUrl, appCtx.proxy_url).href, undefined, true)
+                .then(function(response) {
+                    return response.text();
+                }).then(function(text) {
+                    return parser.read(text) as ParsedWMSCapabilities;
+                });
+        },
+        [capabilitiesUrl]);
+
+    return <div style={{marginLeft: 10}}>
+        {renderPromiseState(capabilities$, capabilities => {
+            const availableLayers = capabilities.Capability.Layer.Layer || [];
+            let filteredLayers = availableLayers;
+            if (props.name_filter) {
+                const replacedFilter = props.name_filter.toLowerCase().replace(/[- ]/g,'_');
+                filteredLayers = filteredLayers.filter(l =>
+                    (l.Title && l.Title.toLowerCase().replace(/[- ]/g,'_') == replacedFilter) ||
+                    (l.Name && l.Name.toLowerCase().replace(/[- ]/g,'_') == replacedFilter));
+            }
+
+            return <>
+                {filteredLayers.map( l =>
+                    <div><a href={strippedUrl.href+'#'+l.Name}>{l.Title || l.Name}</a></div>
+                )}
+                <div style={{fontSize: "80%"}}>
+                    <div>
+                        <span onClick={() => setShowAll(!showAll)}>All {availableLayers.length} layers</span> |
+                        <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
+                    </div>
+                    {showAll && availableLayers.map( l =>
+                        <div><a href={strippedUrl.href+'#'+l.Name}>{l.Title || l.Name}</a></div>
+                    )}
+                </div></>
+        },
+        error => <>
+            <ErrorMessage message={error}/>
+            <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
+        </>) }
+    </div>
+}
+
+export const DataSearchPanel = () => {
+
+    const [searchStr, setSearchStr] = useState<string>();
+
+    const ckan_urls = [
+        'https://opendata.vlaanderen.be',
+        'https://data.jrc.ec.europa.eu/',
+        'https://catalog.data.gov/'
+        //'https://www.europeandataportal.eu/data'
+        //'https://data.europa.eu/euodp/data'
+    ];
+
+    const [selectedUrl, setSelectedUrl] = useState<string>(ckan_urls[0]);
+
+    return <div>
+        <select value={selectedUrl} onChange={e => setSelectedUrl(e.target.value)}>
+            {ckan_urls.map(url => <option value={url}>{new URL(url).hostname}</option> )}
+        </select>
+        <input value={searchStr} onChange={(e) => setSearchStr(e.target.value)} />
+        <CkanSearch ckanUrl={selectedUrl} searchStr={searchStr}/>
+    </div>
 }
 
 

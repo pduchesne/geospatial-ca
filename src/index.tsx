@@ -42,7 +42,12 @@ import {CkanClient, PackageDict, ResourceDict} from "./utils/ckan";
 import WMSCapabilities from "ol/format/WMSCapabilities";
 import {fetchParseError, proxify_url} from "./utils/net";
 import {usePromiseFn} from 'utils/hooks';
-import TileWMS from "ol/source/TileWMS";
+import {createLayerFromDescriptor, descriptorFromString, ParsedWMSCapabilities, stripOGCParams} from "./spatial/utils";
+import LayerGroup from "ol/layer/Group";
+import {Options as GroupOptions} from "ol/layer/Group";
+import BaseLayer from "ol/layer/Base";
+import Attribution from "ol/control/Attribution";
+import {mapInto} from "./ca/model";
 
 
 const AppContext = React.createContext<{proxy_url?: string}>({
@@ -134,7 +139,7 @@ export const MainPage = () => {
     // state variable for the code evaluation status. OK : evaluation correct; DIRTY : code has changed ; ERROR : code evaluation caused an error .
     const [codeStatus, setCodeStatus] = useState<CodeStatus>(CodeStatus.OK);
     // state variable for the project descriptor that results from the CA script code evaluation
-    const [projectDescriptor, setProjectDescriptor] = useState<ProjectDescriptor>();
+    const [projectDescriptor, setProjectDescriptor] = useState<ProjectDescriptor<any, any>>();
 
     // state variable for the number of steps per click
     const [stepNb, setStepNb] = useState<number>(1);
@@ -155,10 +160,27 @@ export const MainPage = () => {
                     (images, size, extent) => {
                     const [stateLattice, baseLattice] = projectDescriptor.init(images, size!);
 
+                    if (!projectDescriptor.stepFn && !projectDescriptor.stepCellFn)
+                        throw "ProjectDescriptor must have a stepFn or stepCellFn";
+
+                    let stepFn;
+                    if (projectDescriptor.stepFn)
+                        stepFn = projectDescriptor.stepFn;
+                    else if (projectDescriptor.stepCellFn) {
+                        stepFn = (currentState: typeof stateLattice, base: typeof baseLattice) => {
+                            return mapInto(
+                                currentState,
+                                currentState.newInstance(),
+                                (x, y, source) => projectDescriptor.stepCellFn! (source.get(x,y), base.get(x,y), x, y, source, base) )
+                        }
+                    } else {
+                        throw "ProjectDescriptor must have 1! stepFn or stepCellFn";
+                    }
+
                     return new SpatialEnvironment(
                         stateLattice,
                         baseLattice,
-                        {step: projectDescriptor.stepFn},
+                        {step: stepFn},
                         extent,
                         projectDescriptor.renderFn
                     );
@@ -192,27 +214,8 @@ export const MainPage = () => {
 
         return projectDescriptor.layers.map( (layerDescriptor) => {
             // assume the layer URL is of the form <service_URL>#<layer_name>
-            const [url, layerName] = layerDescriptor.split('#');
-
-            /*
-            return new ImageLayer({
-                source: new ImageWMS({
-                    crossOrigin: 'Anonymous',
-                    url: stripOGCParams(url).href,
-                    params: {'LAYERS': layerName}
-                })
-            })
-             */
-
-            return new layer.Tile({
-                source: new TileWMS({
-                    crossOrigin: 'Anonymous',
-                    url: stripOGCParams(url).href,
-                    params: {'LAYERS': layerName, 'TILED': false}
-                }),
-                title: 'Source '+layerName
-            } as TileOptions );
-
+            const ld = typeof layerDescriptor == "string" ? descriptorFromString(layerDescriptor) : layerDescriptor;
+            return createLayerFromDescriptor(ld);
         })
         },
         [projectDescriptor] );
@@ -274,7 +277,7 @@ export const MainPage = () => {
                 mapDiv.current.removeChild(mapDiv.current.firstChild);
             }
 
-        const layers = [
+        const layers: BaseLayer[] = [
             // basemap
             new layer.Tile({
                 source: new OSM(),
@@ -282,7 +285,10 @@ export const MainPage = () => {
                 title: 'Basemap'
             } as TileOptions),
             // display the CA image sources
-            ...imageSources
+            new LayerGroup({
+                layers: imageSources,
+                title: 'CA Sources'
+            } as GroupOptions)
         ];
 
         if (imagesContainer)  {
@@ -314,6 +320,9 @@ export const MainPage = () => {
                 new MousePosition({
                         coordinateFormat: p => p ? p.map(coord => coord.toFixed(2)).join(',') : '' ,
                         className: 'ol-control ol-mouse-position'
+                }),
+                new Attribution({
+                    collapsible: true
                 })
             ],
             target: mapDiv.current || undefined,
@@ -428,7 +437,7 @@ export const MainPage = () => {
                         <>
                         <div style={{height: props.height+'px'}} ref={mapDiv}/>
                         <ReactControl map={olmap}>
-                            <LayerList map={olmap}/>
+                            <LayerList layersParent={olmap}/>
                         </ReactControl>
                         </>
                     )}
@@ -445,6 +454,7 @@ export const MainPage = () => {
                                 <option value="">blank</option>
                                 <option>conway</option>
                                 <option>waterflow1</option>
+                                <option>winds</option>
                             </select>
                             <Nav.Item>
                                 <Nav.Link eventKey="controls">Controls</Nav.Link>
@@ -488,12 +498,10 @@ export const MainPage = () => {
 
                                 {selectedCell && (
                                     <div className="controls-status">
-                                        <table>
-                                            <tr><td>Alt</td><td>{selectedCell.cell[1].altitude}</td></tr>
-                                            <tr><td>Water</td><td>{selectedCell.cell[0][1]}</td></tr>
-                                            <tr><td>Dir</td><td>{selectedCell.cell[0][2].join(',')}</td></tr>
-                                        </table>
-                                        <MatrixDisplay matrix={selectedCell.cell[0][3]}/>
+                                        {projectDescriptor?.renderHtml ?
+                                            projectDescriptor.renderHtml(selectedCell.cell[0], selectedCell.cell[1]) :
+                                            JSON.stringify(selectedCell.cell)
+                                        }
                                     </div>
                                 )}
                             </Tab.Pane>
@@ -560,84 +568,6 @@ export const ResultLine = (props: {resource?: ResourceDict, package: PackageDict
     </div>
 }
 
-function stripOGCParams(url_str: string) {
-
-    const paramsToRemove = ['request','service','version','layers'];
-    const url = new URL(url_str);
-    url.searchParams.forEach( (value, key, parent) => {
-        if (paramsToRemove.indexOf(key.toLowerCase()) >= 0)
-            parent.delete(key);
-    }  );
-
-    return url;
-}
-
-export type WMSCapabilities_Layer = {
-    "Name"?: string,
-    "Title"?: string,
-    "Abstract"?: string,
-    "CRS": string[],
-    "EX_GeographicBoundingBox": [number, number, number, number],
-    "BoundingBox": {
-        "crs": string,
-        "extent": [number, number, number, number],
-        "res": [number | null, number | null]
-    }[],
-    "Style": {
-        "Name": string,
-        "Title"?: string,
-        "LegendURL": {
-            "Format": string,
-            "OnlineResource": string,
-            "size": [number, number]
-        }[]
-    }[],
-    "queryable": boolean,
-    "opaque": boolean,
-    "noSubsets": boolean
-    "Layer"?: WMSCapabilities_Layer[]
-}
-
-export type ParsedWMSCapabilities = {
-    "version": string,
-    "Service": {
-        "Name": string,
-        "Title"?: string,
-        "Abstract"?: string,
-        "KeywordList": string[],
-        "OnlineResource": string,
-        "ContactInformation": {
-            "ContactPersonPrimary"?: {"ContactPerson": string, "ContactOrganization": string},
-            "ContactPosition"?: string,
-            "ContactAddress"?: {
-                "AddressType"?: string,
-                "Address"?: string,
-                "City"?: string,
-                "StateOrProvince"?: string,
-                "PostCode"?: string,
-                "Country"?: string
-            },
-            "ContactVoiceTelephone"?: string,
-            "ContactFacsimileTelephone"?: string,
-            "ContactElectronicMailAddress"?: string
-        },
-        "Fees"?: string,
-        "AccessConstraints"?: string,
-        "MaxWidth"?: number,
-        "MaxHeight"?: number
-    },
-    "Capability": {
-        "Request": {
-            [requestName: string]: {
-                "Format": string[],
-                "DCPType": {
-                    "HTTP": { [HttpMethod: string]: { "OnlineResource": string}}}[]
-            }
-        },
-        "Exception": string[],
-        "Layer": WMSCapabilities_Layer
-    }
-}
 
 export const WMSLayers = (props: {wms_url: string, name_filter?: string}) => {
 

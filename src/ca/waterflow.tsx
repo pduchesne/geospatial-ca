@@ -7,6 +7,8 @@ import {
     AutomataDescriptor
 } from "./spatial";
 import { Extent } from "ol/extent";
+import * as React from "react";
+import {MatrixDisplay} from "../index";
 
 /**
  * CA that uses preprocessed diffusion matrix
@@ -46,7 +48,11 @@ export class WaterflowAutomata1 extends CellByCellAutomata<Lattice2D<TerrainCell
             }
         }
 
-        return [thisTerrainStateCell[0] + water_inner_delta, thisTerrainStateCell[1] + water_outer_delta];
+        return [
+            thisTerrainStateCell[0] + water_inner_delta,
+            thisTerrainStateCell[1] + water_outer_delta,
+            thisTerrainStateCell[2],
+            thisTerrainStateCell[3]] as TerrainCellStatus;
     }
 }
 
@@ -179,6 +185,16 @@ export class TerrainEnvironment extends SpatialEnvironment<Lattice2D<TerrainCell
     }
 }
 
+export function renderHtml(stateCell: TerrainCellStatus, baseCell: TerrainCell) {
+    return <><table>
+        <tr><td>Alt</td><td>{baseCell.altitude}</td></tr>
+        <tr><td>Water</td><td>{stateCell[1]}</td></tr>
+        <tr><td>Dir</td><td>{stateCell[2].join(',')}</td></tr>
+    </table>
+        <MatrixDisplay matrix={stateCell[3]}/>
+    </>
+}
+
 const automata = new WaterflowAutomata2();
 const level2alpha = (level: number) => 1 - 1 / Math.pow(1 + level/5 , 2);
 
@@ -188,5 +204,7 @@ export const descriptor: AutomataDescriptor<TerrainCellStatus, TerrainCell> = {
         new BaseLattice2D(size[0], size[1],  (x, y) => ([0, Math.random()>.5 ? 0.4 : 0, [0,0]]) ),
         TerrainLattice.createFromImages(images[0])
     ],
-    renderFn: (state, base) => ImageDataLattice.fromLattice(state, (x, y, cell) => [0,0,255,level2alpha(cell[1])*255]).getData()
+    renderFn: (state, base) => ImageDataLattice.fromLattice(state, (x, y, cell) => [0,0,255,level2alpha(cell[1])*255]).getData(),
+
+    renderHtml
 }

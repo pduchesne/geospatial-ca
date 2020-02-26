@@ -8,7 +8,10 @@ const level2alpha = (level) => 1 - 1 / Math.pow(1 + level/5 , 2);
 
 return {
     // Take a WMS that provides elevation as a blue to red gradient
-    layers: ['https://geoservices.wallonie.be/arcgis/services/RELIEF/WALLONIE_MNT_2013_2014/MapServer/WMSServer#0'],
+    layers: [
+        'https://geoservices.wallonie.be/arcgis/services/RELIEF/WALLONIE_MNT_2013_2014/MapServer/WMSServer#0',
+        'https://image.discomap.eea.europa.eu/arcgis/services/Corine/CLC2018_WM/MapServer/WMSServer#2',
+        'https://image.discomap.eea.europa.eu/arcgis/services/GioLandPublic/ESM2012_Release2017_UAColours_WM/MapServer/WMSServer#1'],
 
     // Default extent
     extent: [4.4,49.4,5.5,51],
@@ -40,5 +43,7 @@ return {
             state,
             // set each to blue with transparency computed with level2alpha
             (x, y, cell) => [0,0,255, level2alpha(cell[1])*255]
-        ).getData()
+        ).getData(),
+
+    renderHtml: lib.waterflow.renderHtml
 }

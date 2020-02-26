@@ -79,6 +79,10 @@
     background-color: rgba(255,255,255,0.7);
 }
 
+.ol-attribution li {
+    display: block;
+}
+
 .ol-layer-list {
     .ol-layer-list-item {
         .layer-title {
@@ -97,6 +101,13 @@
 
     .ol-control {
         background-color: #272727CC;
+    }
+
+    .ol-attribution {
+        ul {
+            color: inherit;
+            text-shadow: 0 0 2px #272727CC;
+        }
     }
 
     .ol-viewport {

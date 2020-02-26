@@ -7,6 +7,8 @@ import { ImageBase, ImageCanvas } from "ol";
 import ImageSource, { Options } from "ol/source/Image";
 import Projection from "ol/proj/Projection";
 import {Size} from "ol/size";
+import {LayerDescriptor} from "../spatial/utils";
+import * as React from "react";
 
 /**
  * Defines a cellular automata : its init, step and render functions.
@@ -24,7 +26,14 @@ export type AutomataDescriptor<STATECELL = any, BASECELL = never> = {
      * @param currentState
      * @param base
      */
-    stepFn: (currentState: Lattice2D<STATECELL>, base: LATTICETYPE<BASECELL>) => Lattice2D<STATECELL>,
+    stepFn?: (currentState: Lattice2D<STATECELL>, base: LATTICETYPE<BASECELL>) => Lattice2D<STATECELL>,
+
+    /**
+     * Runs one step of the CA for one cell
+     * @param currentState
+     * @param base
+     */
+    stepCellFn?: (stateCell: STATECELL, baseCell: BASECELL, x: number, y:number, currentState: Lattice2D<STATECELL>, base: LATTICETYPE<BASECELL>) => STATECELL,
 
     /**
      * Renders the current CA state into an image
@@ -32,13 +41,20 @@ export type AutomataDescriptor<STATECELL = any, BASECELL = never> = {
      * @param base
      */
     renderFn: (state: Lattice2D<STATECELL>, base: LATTICETYPE<BASECELL>) => ImageData
+
+    /**
+     * Renders the current CA state into an image
+     * @param state
+     * @param base
+     */
+    renderHtml?: (stateCell: STATECELL, baseCell: BASECELL) => React.ReactElement | null
 }
 
 /**
  * CA descriptor with added geospatial layers and extent
  */
 export type ProjectDescriptor<STATECELL = any, BASECELL = never> = AutomataDescriptor<STATECELL, BASECELL> & {
-    layers: string[],
+    layers: (string | LayerDescriptor)[],
     extent?: [number, number, number, number]
 }
 
@@ -98,8 +114,8 @@ export class SpatialEnvironment<STATELATTICE extends Lattice2D, BASELATTICE exte
     }
 
     getCellAtSpatial(coords: Coordinate) {
-        const cellX = Math.floor( (this.getBase().getWidth())*(coords[0]-this.getExtent()[0])/(this.getExtent()[2]-this.getExtent()[0]) );
-        const cellY = Math.floor( (this.getBase().getHeight())*(-coords[1]+this.getExtent()[3])/(this.getExtent()[3]-this.getExtent()[1]) );
+        const cellX = Math.floor( (this.getState().getWidth())*(coords[0]-this.getExtent()[0])/(this.getExtent()[2]-this.getExtent()[0]) );
+        const cellY = Math.floor( (this.getState().getHeight())*(-coords[1]+this.getExtent()[3])/(this.getExtent()[3]-this.getExtent()[1]) );
         return this.getCellAtPixel([cellX, cellY]);
     }
 

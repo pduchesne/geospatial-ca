@@ -5,6 +5,8 @@ import {useRef} from "react";
 import {useEffect} from "react";
 import {useState} from "react";
 import BaseLayer from "ol/layer/Base";
+import LayerGroup from "ol/layer/Group";
+import {ObjectEvent} from "ol/Object";
 
 export class ReactControlWrapper extends control.default {
     constructor(containerElement: HTMLElement) {
@@ -37,20 +39,24 @@ export const ReactControl = (props: {map: Map, children: React.ReactNode}) => {
     }
 }
 
-export const LayerList = (props: {map: Map}) => {
+export const LayerList = (props: {layersParent: Map | LayerGroup}) => {
 
-    const {map} = props;
+    const {layersParent} = props;
 
     const [layers, setLayers] = useState<BaseLayer[]>([]);
 
     useEffect( () => {
-        if (map) {
-            map.on("change", evt => {
-                setLayers((evt.target as Map).getLayers().getArray())
-            });
-            setLayers(map.getLayers().getArray());
+        if (layersParent) {
+            const listener = (evt:ObjectEvent) => { setLayers((evt.target as Map).getLayers().getArray()) }
+            layersParent.on("change", listener);
+            setLayers(layersParent.getLayers().getArray());
+
+            return () => layersParent.un("change", listener);
+        } else {
+            return undefined;
         }
-    }, [map]);
+
+    }, [layersParent]);
 
     return <div className='ol-layer-list'>
         {  layers
@@ -65,19 +71,36 @@ export const LayerListItem = (props: {layer: BaseLayer}) => {
     const {layer} = props;
 
     const [visible, setVisible] = useState(layer.getVisible());
+    const [collapsed, setCollapsed] = useState(true);
+
     useEffect( () => {
         if (layer) {
-            layer.on("change:visible", evt => {
-                setVisible(layer.getVisible());
-            });
+            const listener = (evt: ObjectEvent) => { setVisible(layer.getVisible());}
+            layer.on("change:visible", listener);
+
+            return () => {layer.un("change:visible", listener)}
+        } else {
+            return undefined;
         }
     }, [layer]);
 
     return <div className='ol-layer-list-item'>
-        <span className='layer-title'>{layer.get('title') || '<no title>'}</span>
-        <span className='layer-visibility'>
-            <input type="checkbox" checked={visible} onChange={ (e) => layer.setVisible(e.target.checked) } />
-        </span>
-    </div>
+        <div style={{marginLeft: 12}}>
+            {layer instanceof LayerGroup ?
+                <i style={{float: "left", marginLeft: -12, fontSize: 10, marginTop: 3}}
+                   className={"fas fa-folder-"+(collapsed?'plus':'minus')}
+                   onClick={() => setCollapsed(!collapsed)}/> :
+                null}
+            <span className='layer-title'>{layer.get('title') || '<no title>'}</span>
+            <span className='layer-visibility'>
+                <input type="checkbox" checked={visible} onChange={ (e) => layer.setVisible(e.target.checked) } />
+            </span>
+            </div>
+            {layer instanceof LayerGroup && !collapsed ?
+                <div style={{marginLeft: 5}}> <LayerList layersParent={layer}/>  </div> :
+                null}
+
+        </div>
 }
+
 

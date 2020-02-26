@@ -5,18 +5,18 @@ export type Automata<STATELATTICE extends Lattice2D<STATECELL>, BASELATTICE exte
 }
 
 
-export abstract class CellByCellAutomata<STATELATTICE extends Lattice2D<STATECELL>, BASELATTICE extends Lattice2D<BASECELL> | void, STATECELL = any, BASECELL = any>
+export abstract class CellByCellAutomata<STATELATTICE extends Lattice2D, BASELATTICE extends Lattice2D | void>
     implements Automata<STATELATTICE, BASELATTICE> {
 
     step(stateLattice: STATELATTICE, baseLattice: BASELATTICE) {
         return mapInto(
             stateLattice,
-            () => stateLattice.newInstance(),
+            stateLattice.newInstance() as STATELATTICE,
             (x,y,stateLattice) => this.processCell(x,y,stateLattice, baseLattice)
-        ) as STATELATTICE;
+        );
     }
 
-    abstract processCell(x: number, y:number, stateLattice: STATELATTICE, baseLattice?: BASELATTICE) : STATECELL;
+    abstract processCell(x: number, y:number, stateLattice: STATELATTICE, baseLattice?: BASELATTICE) : CELLTYPE<STATELATTICE>;
     
 }
 
@@ -34,7 +34,7 @@ export class TranslateAutomata<STATELATTICE extends Lattice2D, BASELATTICE exten
     
 } 
 
-export class AverageAutomata<STATELATTICE extends Lattice2D<Pixel>, BASELATTICE extends Lattice2D<Pixel>> extends CellByCellAutomata<STATELATTICE, BASELATTICE> {
+export class AverageAutomata extends CellByCellAutomata<Lattice2D<Pixel>, Lattice2D<Pixel>> {
     private range: number;
 
     constructor(range: number) {
@@ -42,7 +42,7 @@ export class AverageAutomata<STATELATTICE extends Lattice2D<Pixel>, BASELATTICE 
         this.range = range;
     }
 
-    processCell(x: number, y:number, stateLattice: STATELATTICE) {
+    processCell(x: number, y:number, stateLattice: Lattice2D<Pixel>) {
         const newCell = [0,0,0,0] as Pixel;
 
         for (let dy=-this.range;dy<=this.range;dy++) {
@@ -127,20 +127,19 @@ export interface Lattice2D<C = any> {
     forEach(forEachFn: (cell: C, x: number, y: number, _this: Lattice2D<C>) => void): void;
 }
 
-export function mapInto<SOURCE extends Lattice2D<SOURCECELL>, SOURCECELL, TARGET extends Lattice2D<TARGETCELL>, TARGETCELL>
+export function mapInto<SOURCE extends Lattice2D, TARGET extends Lattice2D>
     (source: SOURCE,
-     latticeCons: (width: number, height: number) => TARGET, 
-     mapFn:  (x: number, y:number, source: SOURCE) => TARGETCELL ): TARGET {
-    const newLattice = latticeCons(source.getWidth(), source.getHeight());
+     targetLattice: TARGET,
+     mapFn:  (x: number, y:number, source: SOURCE) => CELLTYPE<TARGET> ): TARGET {
     
-    for (let y=0;y<newLattice.getHeight();y++) {
-        for (let x=0;x<newLattice.getWidth();x++) {
-            
-         newLattice.set(x,y, mapFn(x, y, source));
+    for (let y=0;y<targetLattice.getHeight();y++) {
+        for (let x=0;x<targetLattice.getWidth();x++) {
+
+            targetLattice.set(x,y, mapFn(x, y, source));
         }
     }
 
-    return newLattice;
+    return targetLattice;
  }
 
 export class BaseLattice2D<CELLTYPE> implements Lattice2D<CELLTYPE> {
@@ -222,7 +221,10 @@ export class ImageDataLattice implements Lattice2D<Pixel> {
     }
 
     newInstance(width?: number, height?: number) {
-        return new ImageDataLattice(new ImageData(width == undefined ? this.getWidth(): width, height == undefined ? this.getHeight() : height));
+        return new ImageDataLattice(
+            new ImageData(
+                width == undefined ? this.getWidth(): width,
+                height == undefined ? this.getHeight() : height));
     }
 
     forEach(forEachFn: (cell: Pixel, x: number, y: number, _this: ImageDataLattice) => void) {
@@ -242,3 +244,39 @@ export class ImageDataLattice implements Lattice2D<Pixel> {
     }
     
 }
+
+export function iterateNeighbourhood<SL extends Lattice2D, BL extends Lattice2D | never>(
+    state:SL,
+    base:BL,
+    x: number,
+    y:number,
+    distance: number,
+    fn: (dx: number, dy: number, stateAndBase: [CELLTYPE<SL>, CELLTYPE<BL>]) => void) {
+    for (let dy=-distance;dy<=distance;dy++) {
+        for (let dx = -distance; dx <= distance; dx++) {
+            if (x+dx >= 0 && y+dy >= 0 && x+dx < state.getWidth() && y+dy < state.getHeight()) {
+                fn(dx, dy, [state.get(x+dx, y+dy), base?.get(x+dx, y+dy)] );
+            }
+        }
+    }
+}
+
+export function rms(arr: number[]) {
+
+    let squaresSum = arr
+        .map((val) => (val*val))
+        .reduce((acum, sq) => (acum + sq));
+
+    return Math.sqrt(squaresSum/arr.length);
+}
+
+export function rssq(arr: number[]) {
+
+    let squaresSum = arr
+        .map((val) => (val*val))
+        .reduce((acum, sq) => (acum + sq));
+
+    return Math.sqrt(squaresSum);
+}
+
+

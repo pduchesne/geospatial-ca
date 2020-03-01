@@ -3,14 +3,52 @@
 /** @type lib.spatial.ProjectDescriptor */
 const projectDescriptor = {
     description: 'Geospatial take on the classical Conway\'s Game of Life' ,
-    data_layers: ['https://geoservices.wallonie.be/arcgis/services/RELIEF/WALLONIE_MNT_2013_2014/MapServer/WMSServer#0'],
+    data_layers: [
+        // European-wide DEM
+        'https://image.discomap.eea.europa.eu/arcgis/services/Elevation/EUElev_DEM_V11/MapServer/WMSServer#DEM_v11_Masked2',
+        // land use
+        'https://image.discomap.eea.europa.eu/arcgis/services/GioLandPublic/ESM2012_Release2017_UAColours_WM/MapServer/WMSServer#1',
+        //'https://image.discomap.eea.europa.eu/arcgis/services/GioLandPublic/Lucas2012/MapServer/WMSServer#Lucas%20Coverage%202012'
+    ],
     extent: [5,50,6,51], // lon/lat extent
 
-    stepFn: (state, base) => automata.step(state, base),
+    // Initialize the model
     init: (images, size) => [
-        new lib.model.BaseLattice2D(size[0], size[1],  (x, y) => ([0, Math.random()>.95 ? 0.4 : 0, [0,0]]) )
+        // create the state lattice
+        new lib.model.BaseLattice2D(
+            size[0], size[1],
+            // each state cell is a 1-dim array with a boolean [isAlive]
+            (x, y) => ([
+                Math.random() > 0.9, // init with randomly 10% of cells alive
+            ])
+        ),
+        // create the static terrain lattice from DEM and LandUse WMS
+        lib.spatial.TerrainLattice.createFromImages(images[0] /* DEM */, images[1] /* Land use */)
     ],
-    renderFn: (state, base) => lib.model.ImageDataLattice.fromLattice(state, (x, y, cell) => [0,0,255, level2alpha(cell[1])*255]).getData()
+
+    stepCellFn: (
+        stateCell, baseCell, x, y, state, base) => {
+        let aliveNeighbours = 0;
+        lib.model.iterateNeighbourhood(
+            state, base, x, y, 1,
+            (dx, dy, neighbourStateAndBase) => {
+                if ( (dx != 0 || dy != 0) && neighbourStateAndBase[0][0] ) {
+                    aliveNeighbours ++;
+                }
+            });
+
+        if (aliveNeighbours == 2)
+            return [...stateCell]
+        else if (aliveNeighbours == 3)
+            return [true]
+        else
+            return [false];
+    },
+
+    renderFn: (state, base) => lib.model.ImageDataLattice.fromLattice(
+        state,
+        (x, y, stateCell) => [0,0,255, stateCell[0] ? 255 : 0]
+    ).getData()
 }
 
 return projectDescriptor;

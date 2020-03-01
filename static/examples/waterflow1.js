@@ -8,10 +8,11 @@ const level2alpha = (level) => 1 - 1 / Math.pow(1 + level/5 , 2);
 
 /** @type lib.spatial.ProjectDescriptor */
 const projectDescriptor = {
-    description: `Example of a CA that models waterflow based on DEM data. 
-                  This example uses Wallonia DEM data served by a WMS.
+    description:
+`Example of a CA that models waterflow based on DEM data. 
+ This example uses Wallonia DEM data served by a WMS.
                   
-                  Try initializing CA at various zoom levels `,
+ Try initializing CA at various zoom levels `,
 
     data_layers: [
         // This WMS provides DEM data as a blue to red gradient
@@ -22,9 +23,6 @@ const projectDescriptor = {
 
     // Default extent
     extent: [4.4,49.4,5.5,51],
-
-    // delegate the CA step function to the imported model instance
-    stepFn: (state, base) => automata.step(state, base),
 
     // Initialize the model
     init: (images, size) => [
@@ -43,6 +41,9 @@ const projectDescriptor = {
         // and inits a BaseLattice2D with each cell being a 1-dim array with the elevation value
         lib.spatial.TerrainLattice.createFromImages(images[0])
     ],
+
+    // delegate the CA step function to the imported model instance
+    stepFn: (state, base) => automata.step(state, base),
 
     // render the CA model state into a canvas image
     renderFn: (state, base) =>

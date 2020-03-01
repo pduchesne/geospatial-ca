@@ -130,7 +130,7 @@ export class SpatialEnvironment<STATELATTICE extends Lattice2D, BASELATTICE exte
 
 
 export type TerrainCell = {
-    landtype?: string
+    landtype?: number;
     altitude: number;
     capacity?: number;
 
@@ -146,12 +146,13 @@ export type TerrainCellStatus = [number, number, [number,number], number[][]?];
 export class TerrainLattice extends BaseLattice2D<TerrainCell> {
     static createFromImages(dem: ImageData, landuse?: ImageData) {
         const demLattice = new ImageDataLattice(dem);
+        const landUseLattice = landuse && new ImageDataLattice(landuse);
         const newLattice = new TerrainLattice(demLattice.getWidth(), demLattice.getHeight());
 
         // init terrain with altitude, ... 
         for (let y=0;y<newLattice.getHeight();y++) {
             for (let x=0;x<newLattice.getWidth();x++) {
-                newLattice.set(x,y, TerrainLattice.initTerrainCellValues(x, y, demLattice) );
+                newLattice.set(x,y, TerrainLattice.initTerrainCellValues(x, y, demLattice, landUseLattice) );
             }
         }
 
@@ -165,12 +166,14 @@ export class TerrainLattice extends BaseLattice2D<TerrainCell> {
         return newLattice;
     }
 
-    static initTerrainCellValues(x: number, y:number, demLattice: ImageDataLattice): TerrainCell {
+    static initTerrainCellValues(x: number, y:number, demLattice: ImageDataLattice,  landUseLattice?: ImageDataLattice): TerrainCell {
 
-        const currentCell = demLattice.get(x,y);
+        const elevationCell = demLattice.get(x,y);
+        const landUseHsl = landUseLattice && rgbToHsl(landUseLattice.get(x,y));
 
         return {
-            altitude : 1000*(1-rgbToHsl(currentCell)[0]),
+            landtype : landUseHsl && landUseHsl[0],
+            altitude : 1000*(1-rgbToHsl(elevationCell)[0]),
             diffusionMatrix: [[NaN,NaN,NaN], [NaN, NaN, NaN], [NaN, NaN, NaN]]
         }
     }

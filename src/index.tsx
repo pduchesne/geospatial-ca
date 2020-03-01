@@ -6,7 +6,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { Tab} from 'react-bootstrap';
 import 'ol/ol.css';
 import './ol-ca.scss';
-import {useState, useMemo, useEffect, useContext} from 'react';
+import {useState, useMemo, useEffect, useContext, memo} from 'react';
 import OSM from 'ol/source/OSM';
 import * as raster from 'ol/source/Raster';
 //import ImageStatic from 'ol/source/ImageStatic';
@@ -66,10 +66,7 @@ export const App = () => (
                 <Route
                     exact
                     path="/"
-                    render={props => {
-                        return <MainPage />
-                    }
-                    }
+                    render={props => <MainPage />}
                 />
             </div>
         </BrowserRouter>
@@ -104,7 +101,7 @@ enum CodeStatus {
     'ERROR',
 }
 
-const CodeEvalButton = (props: {status: CodeStatus, evalFn: () => void} & React.HTMLAttributes<HTMLElement>) => {
+const CodeEvalButton = memo((props: {status: CodeStatus, evalFn: () => void} & React.HTMLAttributes<HTMLElement>) => {
 
     const {status, evalFn, ...rest} = props;
 
@@ -117,13 +114,13 @@ const CodeEvalButton = (props: {status: CodeStatus, evalFn: () => void} & React.
         case CodeStatus.ERROR:
             return <i className={"fas fa-times"} {...rest} style={{...rest.style, color: 'red'}}></i>
     }
-}
+})
 
 /**
  * Main map component for the application
  * @constructor
  */
-export const MainPage = () => {
+export const MainPage = memo(() => {
 
     // state variable for the active tab
     const [activeTab, setActiveTab] = useState<string>('controls');
@@ -491,7 +488,7 @@ export const MainPage = () => {
                                         <button onClick={initCAWithImages}>
                                             Init CA
                                         </button>
-                                        {caImageSource?.getEnv() ? "Initialized" : "" }
+                                        {caImageSource?.getEnv() ? "Initialized" : <i>Initialize the Cellular Automaton</i> }
                                     </div>
                                     {caImageSource?.getEnv() && <>
                                         <div className="controls-action">
@@ -502,7 +499,10 @@ export const MainPage = () => {
                                             >
                                                 Step <input style={{width: "3em"}} type="number" value={stepNb} onChange={e => setStepNb(e.target.valueAsNumber)} />
                                             </button>
-                                            {caState?.totalSteps != undefined && <span>{caState?.totalSteps} steps; last iteration : {caState?.iterationTime}ms</span> }
+                                            {caState?.totalSteps != undefined ?
+                                                <span>{caState?.totalSteps} steps; last iteration : {caState?.iterationTime}ms</span>:
+                                                <i>Step the CA n time(s)</i>
+                                            }
                                         </div>
                                         <div className="controls-action">
                                         <button onClick={() => animateGIF(stepNb)}>
@@ -532,9 +532,7 @@ export const MainPage = () => {
                                 )}
                                 <SizeMeasurer>
                                     {(props: {height: number, width: number} ) => (
-                                        <CodeEditor code={code} height={props.height} onCodeChange={(code, event) => {
-                                            setCode(code);
-                                        }}/>
+                                        <CodeEditor code={code} height={props.height} onCodeChange={setCode}/>
                                     )}
                                 </SizeMeasurer>
                             </Tab.Pane>
@@ -546,9 +544,9 @@ export const MainPage = () => {
                 </div>
             </div>
         </div>
-}
+})
 
-export const CkanSearch = (props: {ckanUrl: string, searchStr?: string}) => {
+export const CkanSearch = memo((props: {ckanUrl: string, searchStr?: string}) => {
 
     const appCtx = useContext(AppContext);
 
@@ -570,9 +568,9 @@ export const CkanSearch = (props: {ckanUrl: string, searchStr?: string}) => {
             </div>)
         }
     </div>
-}
+})
 
-export const ResultLine = (props: {resource?: ResourceDict, package: PackageDict}) => {
+export const ResultLine = memo((props: {resource?: ResourceDict, package: PackageDict}) => {
 
     const [showDetails, setShowDetails] = useState<boolean>();
 
@@ -585,10 +583,10 @@ export const ResultLine = (props: {resource?: ResourceDict, package: PackageDict
             <WMSLayers wms_url={props.resource.url} name_filter={props.package.title || props.package.name}/>
         )}
     </div>
-}
+})
 
 
-export const WMSLayers = (props: {wms_url: string, name_filter?: string}) => {
+export const WMSLayers = memo((props: {wms_url: string, name_filter?: string}) => {
 
     const appCtx = useContext(AppContext);
     const [showAll, setShowAll] = useState<boolean>(false);
@@ -644,9 +642,9 @@ export const WMSLayers = (props: {wms_url: string, name_filter?: string}) => {
             <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
         </>) }
     </div>
-}
+})
 
-export const DataSearchPanel = () => {
+export const DataSearchPanel = memo(() => {
 
     const [searchStr, setSearchStr] = useState<string>();
 
@@ -662,12 +660,12 @@ export const DataSearchPanel = () => {
 
     return <div>
         <select value={selectedUrl} onChange={e => setSelectedUrl(e.target.value)}>
-            {ckan_urls.map(url => <option value={url}>{new URL(url).hostname}</option> )}
+            {ckan_urls.map( (url, idx) => <option key={idx} value={url}>{new URL(url).hostname}</option> )}
         </select>
         <input value={searchStr} onChange={(e) => setSearchStr(e.target.value)} />
         <CkanSearch ckanUrl={selectedUrl} searchStr={searchStr}/>
     </div>
-}
+})
 
 
 /*
@@ -720,12 +718,12 @@ export const DataSearchPanel = () => {
                     </Tab.Container>
  */
 
-export const MatrixDisplay = (props: {matrix?: number[][]}) => {
+export const MatrixDisplay = memo((props: {matrix?: number[][]}) => {
     const {matrix} = props;
     return matrix ?
         <table>
             {matrix.map(row => <tr>{row.map(cell => <td>{cell.toFixed(2)}</td>)}</tr>)}
         </table> : null;
-}
+})
 
 ReactDOM.render(<App />, document.getElementById('index'));

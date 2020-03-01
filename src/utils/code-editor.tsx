@@ -1,11 +1,11 @@
 import * as React from 'react';
 
 import MonacoEditor, {ChangeHandler} from "react-monaco-editor";
-import { useEffect, useMemo, useState} from "react";
+import {memo, useEffect, useMemo, useState} from "react";
 import * as monacoEditor from "monaco-editor";
 import {editor} from "monaco-editor";
 
-export function CodeEditor(props: {code: string, onCodeChange?: ChangeHandler, height?: string | number}) {
+export const CodeEditor = memo((props: {code: string, onCodeChange?: ChangeHandler, height?: string | number}) => {
 
     const [libs, setLibs] = useState<{[key : string] : string}>();
 
@@ -50,7 +50,7 @@ export function CodeEditor(props: {code: string, onCodeChange?: ChangeHandler, h
 
 
 
-    const libNames = ["lib", "ca/model", "ca/spatial", "ca/waterflow"];
+    const libNames = ["lib", "ca/model", "ca/spatial", "ca/waterflow", "spatial/utils"];
     useEffect( () => {
             const promises = libNames.map(libName => fetch(libName+".d.ts").then(
                 (response) =>
@@ -85,4 +85,4 @@ export function CodeEditor(props: {code: string, onCodeChange?: ChangeHandler, h
         editorWillMount={ editorWillMount }
         theme="vs-dark"
     /> : null;
-}
+})

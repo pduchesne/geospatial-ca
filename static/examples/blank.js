@@ -1,9 +1,17 @@
 
-// return an instance of ProjectDescriptor
+// return an instance of ProjectDescriptor that describes the cellular automata :
+// wms inputs, init function, step function, render function.
 
-return {
-    // a set of W*S layers that will be used to init the cellular automata
-    layers: ['http://server.com/wms#0'],
+/** @type lib.spatial.ProjectDescriptor */
+const projectDescriptor = {
+
+
+    /**
+     * a set of geospatial layers (currently only WMS) that will be used to init the cellular automata
+     * each layer can be of the form <wms_url>#<layer_name>, or a {@link spatial.LayerDescriptor} instance describing the resource
+     * @type (spatial.LayerDescriptor | string)[]
+     */
+    data_layers: ['http://server.com/wms#0'],
 
     // Default extent in EPSG:4326 ; optional
     extent: [-180, -90, 180, 90],
@@ -21,4 +29,6 @@ return {
 
     // function that renders the CA state into a canvas image
     renderFn: (state, base) => /* do the rendering */
-}
+};
+
+return projectDescriptor;

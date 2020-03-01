@@ -1,7 +1,7 @@
 import * as control from "ol/control/Control";
 import {Map} from "ol";
 import * as React from "react";
-import {useRef} from "react";
+import {memo, useRef} from "react";
 import {useEffect} from "react";
 import {useState} from "react";
 import BaseLayer from "ol/layer/Base";
@@ -67,7 +67,7 @@ export const LayerList = (props: {layersParent: Map | LayerGroup}) => {
 
 }
 
-export const LayerListItem = (props: {layer: BaseLayer}) => {
+export const LayerListItem = memo((props: {layer: BaseLayer}) => {
     const {layer} = props;
 
     const [visible, setVisible] = useState(layer.getVisible());
@@ -75,10 +75,15 @@ export const LayerListItem = (props: {layer: BaseLayer}) => {
 
     useEffect( () => {
         if (layer) {
-            const listener = (evt: ObjectEvent) => { setVisible(layer.getVisible());}
+            setVisible(layer.getVisible());
+            const listener = (evt: ObjectEvent) => {
+                setVisible(layer.getVisible());
+            }
             layer.on("change:visible", listener);
 
-            return () => {layer.un("change:visible", listener)}
+            return () => {
+                layer.un("change:visible", listener)
+            }
         } else {
             return undefined;
         }
@@ -93,7 +98,9 @@ export const LayerListItem = (props: {layer: BaseLayer}) => {
                 null}
             <span className='layer-title'>{layer.get('title') || '<no title>'}</span>
             <span className='layer-visibility'>
-                <input type="checkbox" checked={visible} onChange={ (e) => layer.setVisible(e.target.checked) } />
+                <input type="checkbox" checked={visible} onChange={ (e) =>
+                    layer.setVisible(e.target.checked)
+                } />
             </span>
             </div>
             {layer instanceof LayerGroup && !collapsed ?
@@ -101,6 +108,6 @@ export const LayerListItem = (props: {layer: BaseLayer}) => {
                 null}
 
         </div>
-}
+})
 
 

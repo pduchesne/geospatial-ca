@@ -28,6 +28,8 @@ export function CodeEditor(props: {code: string, onCodeChange?: ChangeHandler, h
             target: monaco.languages.typescript.ScriptTarget.ES2016,
             allowNonTsExtensions: true,
             allowJs: true,
+            checkJs: true,
+            //strict: true
             //isolatedModules: true,
             //moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
             //typeRoots: ["node_modules/@types"],

@@ -5,14 +5,14 @@ import { Map, View } from 'ol';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { Tab} from 'react-bootstrap';
 import 'ol/ol.css';
-import 'ol-ca.scss';
+import './ol-ca.scss';
 import {useState, useRef, useMemo, useEffect, useContext} from 'react';
 import OSM from 'ol/source/OSM';
 import * as raster from 'ol/source/Raster';
 //import ImageStatic from 'ol/source/ImageStatic';
 import * as layer from 'ol/layer';
 import { ViewOptions } from 'ol/View';
-import {ReactControl, LayerList} from "./ol-helpers";
+import {ReactControl, LayerList} from "./spatial/ol-helpers";
 import Polygon from "ol/geom/Polygon";
 import VectorSource from "ol/source/Vector";
 import Feature from "ol/Feature";
@@ -28,7 +28,7 @@ import {
 import {ErrorMessage, renderPromiseState, SizeMeasurer} from 'utils/ui';
 
 import * as lib from 'lib';
-import {CodeEditor} from "./code-editor";
+import {CodeEditor} from "./utils/code-editor";
 import Layer from "ol/layer/Layer";
 import {Options as TileOptions} from "ol/layer/Tile";
 import {Options as ImageOptions} from "ol/layer/Image";
@@ -44,7 +44,7 @@ import {fetchParseError, proxify_url} from "./utils/net";
 import {usePromiseFn} from 'utils/hooks';
 import {
     createLayerFromDescriptor,
-    descriptorFromString,
+    descriptorFromString, LayerDescriptor,
     ParsedWMSCapabilities,
     stripOGCParams
 } from "./spatial/utils";
@@ -124,6 +124,9 @@ const CodeEvalButton = (props: {status: CodeStatus, evalFn: () => void} & React.
  * @constructor
  */
 export const MainPage = () => {
+
+    // state variable for the active tab
+    const [activeTab, setActiveTab] = useState<string>('controls');
 
     // div container that will hold the OL map
     const mapDiv = useRef<HTMLDivElement>(null);
@@ -221,7 +224,9 @@ export const MainPage = () => {
 
         return projectDescriptor.layers.map( (layerDescriptor) => {
             // assume the layer URL is of the form <service_URL>#<layer_name>
-            const ld = typeof layerDescriptor == "string" ? descriptorFromString(layerDescriptor) : layerDescriptor;
+            const ld:LayerDescriptor = typeof layerDescriptor == "string" ?
+                descriptorFromString(layerDescriptor) :
+                {tiled: true /* default value for tiling*/, ...layerDescriptor};
             return createLayerFromDescriptor(ld);
         })
         },
@@ -445,7 +450,7 @@ export const MainPage = () => {
     }
 
     return <div className='mainApp'>
-            <div className='mapPanel'>
+            <div className='mapPanel' style={{flex: 2.5}}>
                 <SizeMeasurer>
                     {(props: {height: number, width: number} ) => (
                         <>
@@ -458,11 +463,11 @@ export const MainPage = () => {
 
                 </SizeMeasurer>
             </div>
-            <div className='controlsPanel'>
+            <div className='controlsPanel' style={{flex: activeTab=='controls'?1.5:5}}>
                 <div style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
-                    <Tab.Container defaultActiveKey="controls" id="menu">
-                        <Nav variant={"tabs"}>
-                            <select style={{marginBottom: 3}}
+                    <Tab.Container activeKey={activeTab} defaultActiveKey="controls" id="menu">
+                        <Nav variant={"tabs"} onSelect={(eventKey: string) => setActiveTab(eventKey)}>
+                            <select style={{marginBottom: 3, marginRight: 'auto'}}
                                     value={scriptName}
                                     onChange={(evt) => setScriptName(evt.currentTarget.value)}>
                                 <option value="">blank</option>
@@ -525,7 +530,7 @@ export const MainPage = () => {
                                     </div>
                                 )}
                             </Tab.Pane>
-                            <Tab.Pane eventKey="code">
+                            <Tab.Pane eventKey="code" style={{flex: 2}}>
                                 {error && (
                                     <div className="error">
                                         {error}

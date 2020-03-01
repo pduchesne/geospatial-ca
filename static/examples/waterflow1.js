@@ -6,7 +6,8 @@ const automata = new lib.waterflow.WaterflowAutomata2();
 // The more water, the less transparent
 const level2alpha = (level) => 1 - 1 / Math.pow(1 + level/5 , 2);
 
-return {
+/** @type lib.spatial.ProjectDescriptor */
+const projectDescriptor = {
     // Take a WMS that provides elevation as a blue to red gradient
     layers: [
         'https://geoservices.wallonie.be/arcgis/services/RELIEF/WALLONIE_MNT_2013_2014/MapServer/WMSServer#0',
@@ -46,4 +47,6 @@ return {
         ).getData(),
 
     renderHtml: lib.waterflow.renderHtml
-}
+};
+
+return projectDescriptor;

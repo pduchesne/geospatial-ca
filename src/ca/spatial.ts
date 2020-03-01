@@ -2,7 +2,7 @@ import {Lattice2D, Environment, Automata, ImageDataLattice, BaseLattice2D, LATTI
 import {Coordinate} from "ol/coordinate";
 import {fromExtent} from "ol/geom/Polygon";
 import { Extent, getHeight } from "ol/extent";
-import { rgbToHsl } from "color-utils";
+import { rgbToHsl } from "utils/image";
 import { ImageBase, ImageCanvas, Map } from "ol";
 import ImageSource, { Options } from "ol/source/Image";
 import Projection from "ol/proj/Projection";

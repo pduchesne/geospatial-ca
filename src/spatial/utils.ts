@@ -4,6 +4,8 @@ import * as layer from "ol/layer";
 import {Options as TileOptions} from "ol/layer/Tile";
 import {Options as ImageOptions} from "ol/layer/Image";
 import TileWMS from "ol/source/TileWMS";
+import LayerRenderer from "ol/renderer/Layer";
+import BaseLayer from "ol/layer/Base";
 
 export type WMSCapabilities_Layer = {
     "Name"?: string,
@@ -142,3 +144,34 @@ export function createLayerFromDescriptor(ld: LayerDescriptor) {
     }
 
 }
+
+export function getLayerCanvasContext(layer: BaseLayer): CanvasRenderingContext2D | undefined {
+    const anyLayer = (layer as any);
+    const renderer = anyLayer.getRenderer && anyLayer.getRenderer() as LayerRenderer;
+    if (renderer)
+        return (renderer as any).context as CanvasRenderingContext2D;
+    else
+        return undefined;
+}
+
+/*
+export function renderMapToCanvas(map: Map, width?: number, height?: number): HTMLCanvasElement {
+    const canvas: HTMLCanvasElement = document.createElement('canvas');
+
+    width = width || map.getSize()![0];
+    height = height || map.getSize()![1];
+
+    canvas.setAttribute('width', width+'px');
+    canvas.setAttribute('height', height+'px');
+
+    map.getLayers().forEach(l => {
+        if (l.getVisible()) {
+            const ctx = getLayerCanvasContext(l);
+            ctx && canvas.getContext('2d')!.drawImage(ctx.canvas, 0, 0);
+        }
+    });
+
+    return canvas;
+}
+ */
+

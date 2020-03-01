@@ -3,12 +3,14 @@ import {Coordinate} from "ol/coordinate";
 import {fromExtent} from "ol/geom/Polygon";
 import { Extent, getHeight } from "ol/extent";
 import { rgbToHsl } from "color-utils";
-import { ImageBase, ImageCanvas } from "ol";
+import { ImageBase, ImageCanvas, Map } from "ol";
 import ImageSource, { Options } from "ol/source/Image";
 import Projection from "ol/proj/Projection";
 import {Size} from "ol/size";
 import {LayerDescriptor} from "../spatial/utils";
 import * as React from "react";
+import GIFJS from "gif.js/dist/gif.js";
+import html2canvas from "html2canvas";
 
 /**
  * Defines a cellular automata : its init, step and render functions.
@@ -284,8 +286,64 @@ export class CellularAutomataSource extends ImageSource {
         if (this.caEnv) {
             for (let i=0;i<n;i++)  {
                 this.caEnv.applyAutomata();
-                this.dispatchEvent("stateChange");
             }
+            this.dispatchEvent("stateChange");
         }
+    }
+}
+
+export async function animate(
+    source: CellularAutomataSource,
+    map: Map,
+    frameNb: number,
+    stepsPerFrame: number = 5): Promise<Blob> {
+
+    let deferredResult: {resolve: (blob: Blob) => void, reject: (reason?: any) => void};
+    var promise = new Promise<Blob>(function(resolve, reject){
+        deferredResult = {resolve, reject};
+    });
+
+    try {
+
+        var gif = new GIFJS({
+            workers: 2,
+            quality: 10
+        });
+
+        gif.on('finished', function(blob: Blob) {
+            deferredResult.resolve(blob);
+            //blobToDataURL(blob, (url) => {console.log(url)});
+            //window.open(URL.createObjectURL(blob), "NEW");
+        });
+
+        for (let i=0;i<frameNb;i++) {
+            const mapRendered = new Promise((resolve, reject) => {
+                map.once('postrender', e => {
+                    resolve();
+                });
+            });
+            source.stepAutomata(stepsPerFrame);
+            // add an image element
+            const mapLayersDiv = map.getTargetElement().getElementsByClassName('ol-layers').item(0);
+            await mapRendered.then( () =>
+                html2canvas(
+                    mapLayersDiv as HTMLElement,
+                    {backgroundColor: null, scale: 0.5})
+            ).then(canvas => {
+                gif.addFrame(canvas, {delay: 100});
+            })
+        }
+
+        gif.render();
+
+        /*
+        const canvas = renderMapToCanvas(olmap);
+        //gif.addFrame(ctx, {copy: true, width: ctx.canvas.width, height: ctx.canvas.height});
+        gif.addFrame(canvas);
+        */
+    } catch (err) {
+        deferredResult!.reject(err);
+    } finally {
+        return promise;
     }
 }

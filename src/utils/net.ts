@@ -57,3 +57,11 @@ export function cancelableFetch(input: RequestInfo, init?: RequestInit): Promise
 
     return new CancellablePromise(promise, controller);
 }
+
+export function blobToDataURL(blob: Blob, callback: (url:string) => void ) {
+    var a = new FileReader();
+    a.onload = function(e) {
+        callback(e.target!.result as string);
+    }
+    a.readAsDataURL(blob);
+}

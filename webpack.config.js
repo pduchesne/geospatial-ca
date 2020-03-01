@@ -94,6 +94,9 @@ module.exports = {
           }),
         new CopyWebpackPlugin([
             { from: 'static' }
+        ]),
+        new CopyWebpackPlugin([
+            'node_modules/gif.js/dist/gif.worker.js',
         ])
     ]
 };

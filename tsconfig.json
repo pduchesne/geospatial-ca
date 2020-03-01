@@ -18,10 +18,11 @@
         "noUnusedLocals": true,
         "baseUrl": "./src",
         "preserveConstEnums": true,
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "esModuleInterop": true
     },
     "include": [
         "src"
-    ],
+    ]
   
 }

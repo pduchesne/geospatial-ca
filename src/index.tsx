@@ -22,7 +22,7 @@ import {
     TerrainCell,
     CellularAutomataSource,
     ProjectDescriptor,
-    SpatialEnvironmentConstructor, SpatialEnvironment
+    SpatialEnvironmentConstructor, SpatialEnvironment, animate
 } from 'ca/spatial';
 
 import {ErrorMessage, renderPromiseState, SizeMeasurer} from 'utils/ui';
@@ -42,7 +42,12 @@ import {CkanClient, PackageDict, ResourceDict} from "./utils/ckan";
 import WMSCapabilities from "ol/format/WMSCapabilities";
 import {fetchParseError, proxify_url} from "./utils/net";
 import {usePromiseFn} from 'utils/hooks';
-import {createLayerFromDescriptor, descriptorFromString, ParsedWMSCapabilities, stripOGCParams} from "./spatial/utils";
+import {
+    createLayerFromDescriptor,
+    descriptorFromString,
+    ParsedWMSCapabilities,
+    stripOGCParams
+} from "./spatial/utils";
 import LayerGroup from "ol/layer/Group";
 import {Options as GroupOptions} from "ol/layer/Group";
 import BaseLayer from "ol/layer/Base";
@@ -143,6 +148,8 @@ export const MainPage = () => {
 
     // state variable for the number of steps per click
     const [stepNb, setStepNb] = useState<number>(1);
+    // state variable for generated GIF
+    const [gifDataUrl, setGifDataUrl] = useState<string>();
 
     const [pendingIterations, setPendingIterations] = useState<number>(0);
 
@@ -430,6 +437,13 @@ export const MainPage = () => {
         }
     }
 
+    const animateGIF = async (frameNb: number, stepsPerFrame: number = 4) => {
+        caImageSource && animate(caImageSource, olmap, frameNb, stepsPerFrame).then(
+            blob => setGifDataUrl(URL.createObjectURL(blob)),
+            err => handleError(err)
+        );
+    }
+
     return <div className='mainApp'>
             <div className='mapPanel'>
                 <SizeMeasurer>
@@ -480,7 +494,7 @@ export const MainPage = () => {
                                         </button>
                                         {caImageSource?.getEnv() ? "Initialized" : "" }
                                     </div>
-                                    {caImageSource?.getEnv() && (
+                                    {caImageSource?.getEnv() && <>
                                         <div className="controls-action">
                                             <button onClick={
                                                 (e) =>
@@ -491,7 +505,13 @@ export const MainPage = () => {
                                             </button>
                                             {caState?.totalSteps != undefined && <span>{caState?.totalSteps} steps; last iteration : {caState?.iterationTime}ms</span> }
                                         </div>
-                                    )
+                                        <div className="controls-action">
+                                        <button onClick={() => animateGIF(stepNb)}>
+                                            Create GIF
+                                        </button>
+                                            <img src={gifDataUrl} width="200" />
+                                        </div>
+                                    </>
                                     }
 
                                 </div>

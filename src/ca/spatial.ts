@@ -17,6 +17,11 @@ import html2canvas from "html2canvas";
  */
 export type AutomataDescriptor<STATECELL = any, BASECELL = never> = {
     /**
+     * Description of this automata
+     */
+    description?: string,
+
+    /**
      * Initialize the CA state and base lattices from an array of ImageData
      * @param images
      * @param size
@@ -56,7 +61,7 @@ export type AutomataDescriptor<STATECELL = any, BASECELL = never> = {
  * CA descriptor with added geospatial layers and extent
  */
 export type ProjectDescriptor<STATECELL = any, BASECELL = never> = AutomataDescriptor<STATECELL, BASECELL> & {
-    layers: (string | LayerDescriptor)[],
+    data_layers: (string | LayerDescriptor)[],
     extent?: [number, number, number, number]
 }
 

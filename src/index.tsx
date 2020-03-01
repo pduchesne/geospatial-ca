@@ -40,7 +40,7 @@ import '@fortawesome/fontawesome-free/scss/fontawesome.scss';
 import {transformExtent} from "ol/proj";
 import {CkanClient, PackageDict, ResourceDict} from "./utils/ckan";
 import WMSCapabilities from "ol/format/WMSCapabilities";
-import {fetchParseError, proxify_url} from "./utils/net";
+import {cancelableFetch, fetchParseError, proxify_url} from "./utils/net";
 import {usePromiseFn} from 'utils/hooks';
 import {
     createLayerFromDescriptor,
@@ -53,6 +53,7 @@ import {Options as GroupOptions} from "ol/layer/Group";
 import BaseLayer from "ol/layer/Base";
 import Attribution from "ol/control/Attribution";
 import {mapInto} from "./ca/model";
+import Markdown from 'markdown-to-jsx';
 
 
 const AppContext = React.createContext<{proxy_url?: string}>({
@@ -216,7 +217,7 @@ export const MainPage = memo(() => {
     const imageSources = useMemo<Layer[]>( () => {
         if (!projectDescriptor) return [];
 
-        return projectDescriptor.layers.map( (layerDescriptor) => {
+        return projectDescriptor.data_layers.map( (layerDescriptor) => {
             // assume the layer URL is of the form <service_URL>#<layer_name>
             const ld:LayerDescriptor = typeof layerDescriptor == "string" ?
                 descriptorFromString(layerDescriptor) :
@@ -252,26 +253,32 @@ export const MainPage = memo(() => {
      * Select an example script and sets its content in the script editor
      * @param name script file name
      */
+    /*
     const selectExample = (name?:string) => {
         if (name) {
+            console.log("Fetching "+name);
             fetch("examples/" + name + ".js").then(
                 (value) => {
                     value.text().then(code => {
+                        console.log("Fetched "+name);
                         setCode(code);
                         evalCode(code);
                     });
                 }
             )
         } else {
+            console.log("Fetching blank");
             fetch("examples/blank.js").then(
                 (value) => {
                     value.text().then(code => {
+                        console.log("Fetched blank");
                         setCode(code);
                     });
                 }
             )
         }
     }
+     */
 
     // Memoized OL Map
     // Recreated whener mapDiv, viewOptions or imagesContainer changes
@@ -386,9 +393,16 @@ export const MainPage = memo(() => {
         setScriptName(hashParams.get('script') || 'conway');
     }, []);
 
-    useEffect( () => {
-        selectExample(scriptName);
-    }, [scriptName]);
+    usePromiseFn(() =>
+        cancelableFetch("examples/" + (scriptName || 'blank') + ".js").then(
+            (value) => {
+                value.text().then(code => {
+                    setCode(code);
+                    scriptName && evalCode(code); // do not evaluate automatically the empty code template
+                });
+            }
+        ),
+        [scriptName]);
 
     useEffect( () => {
         setCodeStatus(CodeStatus.DIRTY);
@@ -484,6 +498,11 @@ export const MainPage = memo(() => {
                         <Tab.Content>
                             <Tab.Pane eventKey="controls">
                                 <div className="controls-actions">
+                                    {projectDescriptor?.description &&
+                                    <div className="ca-description">
+                                        <Markdown >{projectDescriptor?.description}</Markdown>
+                                    </div>
+                                    }
                                     <div className="controls-action">
                                         <button onClick={initCAWithImages}>
                                             Init CA
@@ -499,9 +518,9 @@ export const MainPage = memo(() => {
                                             >
                                                 Step <input style={{width: "3em"}} type="number" value={stepNb} onChange={e => setStepNb(e.target.valueAsNumber)} />
                                             </button>
-                                            {caState?.totalSteps != undefined ?
+                                            {caState?.totalSteps ?
                                                 <span>{caState?.totalSteps} steps; last iteration : {caState?.iterationTime}ms</span>:
-                                                <i>Step the CA n time(s)</i>
+                                                <i>Step the CA <span style={{fontFamily: "monospace"}}>n</span> time(s)</i>
                                             }
                                         </div>
                                         <div className="controls-action">
@@ -625,7 +644,7 @@ export const WMSLayers = memo((props: {wms_url: string, name_filter?: string}) =
 
             return <>
                 {filteredLayers.map( l =>
-                    <div><a href={strippedUrl.href+'#'+l.Name}>{l.Title || l.Name}</a></div>
+                    <div key={l.Name}><a href={strippedUrl.href+'#'+l.Name}>{l.Title || l.Name}</a></div>
                 )}
                 <div style={{fontSize: "80%"}}>
                     <div>
@@ -633,7 +652,7 @@ export const WMSLayers = memo((props: {wms_url: string, name_filter?: string}) =
                         <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
                     </div>
                     {showAll && availableLayers.map( l =>
-                        <div><a href={strippedUrl.href+'#'+l.Name}>{l.Title || l.Name}</a></div>
+                        <div key={l.Name}><a href={strippedUrl.href+'#'+l.Name}>{l.Title || l.Name}</a></div>
                     )}
                 </div></>
         },

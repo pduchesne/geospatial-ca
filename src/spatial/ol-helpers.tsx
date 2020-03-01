@@ -8,13 +8,37 @@ import BaseLayer from "ol/layer/Base";
 import LayerGroup from "ol/layer/Group";
 import {ObjectEvent} from "ol/Object";
 
+export const MapContainer = memo((props: {map: Map, width?: number, height?: number}) => {
+    // div container that will hold the OL map
+    const mapDiv = useRef<HTMLDivElement>(null);
+
+    useEffect( () => {
+        if (mapDiv.current)
+            // first empty the content of mapDiv
+            while (mapDiv.current.firstChild) {
+                mapDiv.current.removeChild(mapDiv.current.firstChild);
+            }
+
+        props.map.setTarget(mapDiv.current || undefined);
+    }, [props.map, mapDiv.current]);
+
+    useEffect( () => {
+        const currentZoom = props.map.getView().getZoom();
+        props.map.updateSize();
+        currentZoom && props.map.getView().setZoom(currentZoom);
+    }, [props.width, props.height]);
+
+    return <div style={{height: props.height && props.height+'px'}} ref={mapDiv}/>
+})
+
+
 export class ReactControlWrapper extends control.default {
     constructor(containerElement: HTMLElement) {
         super({element: containerElement});
     }
 }
 
-export const ReactControl = (props: {map: Map, children: React.ReactNode}) => {
+export const ReactControl = memo((props: {map: Map, children: React.ReactNode}) => {
     const {map, children} = props;
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -37,9 +61,9 @@ export const ReactControl = (props: {map: Map, children: React.ReactNode}) => {
     } else {
         return null;
     }
-}
+})
 
-export const LayerList = (props: {layersParent: Map | LayerGroup}) => {
+export const LayerList = memo((props: {layersParent: Map | LayerGroup}) => {
 
     const {layersParent} = props;
 
@@ -65,7 +89,7 @@ export const LayerList = (props: {layersParent: Map | LayerGroup}) => {
         }
     </div>
 
-}
+})
 
 export const LayerListItem = memo((props: {layer: BaseLayer}) => {
     const {layer} = props;

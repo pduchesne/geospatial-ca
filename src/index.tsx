@@ -6,13 +6,13 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { Tab} from 'react-bootstrap';
 import 'ol/ol.css';
 import './ol-ca.scss';
-import {useState, useRef, useMemo, useEffect, useContext} from 'react';
+import {useState, useMemo, useEffect, useContext} from 'react';
 import OSM from 'ol/source/OSM';
 import * as raster from 'ol/source/Raster';
 //import ImageStatic from 'ol/source/ImageStatic';
 import * as layer from 'ol/layer';
 import { ViewOptions } from 'ol/View';
-import {ReactControl, LayerList} from "./spatial/ol-helpers";
+import {ReactControl, LayerList, MapContainer} from "./spatial/ol-helpers";
 import Polygon from "ol/geom/Polygon";
 import VectorSource from "ol/source/Vector";
 import Feature from "ol/Feature";
@@ -127,9 +127,6 @@ export const MainPage = () => {
 
     // state variable for the active tab
     const [activeTab, setActiveTab] = useState<string>('controls');
-
-    // div container that will hold the OL map
-    const mapDiv = useRef<HTMLDivElement>(null);
 
     // state variable for the OL map view options
     const [viewOptions, setViewOptions] = useState<ViewOptions>();
@@ -283,12 +280,6 @@ export const MainPage = () => {
     // Recreated whener mapDiv, viewOptions or imagesContainer changes
     const olmap = useMemo( () => {
 
-        if (mapDiv.current)
-            // first empty the content of mapDiv
-            while (mapDiv.current.firstChild) {
-                mapDiv.current.removeChild(mapDiv.current.firstChild);
-            }
-
         const layers: BaseLayer[] = [
             // basemap
             new layer.Tile({
@@ -330,23 +321,26 @@ export const MainPage = () => {
         const map = new Map({
             controls: [
                 new MousePosition({
-                        coordinateFormat: p => p ? p.map(coord => coord.toFixed(2)).join(',') : '' ,
-                        className: 'ol-control ol-mouse-position'
+                    projection: "EPSG:4326",
+                    coordinateFormat: p => p ? p.map(coord => coord.toFixed(2)).join(',') : '' ,
+                    className: 'ol-control ol-mouse-position'
                 }),
                 new Attribution({
                     collapsible: true
                 })
             ],
-            target: mapDiv.current || undefined,
+            //target: undefined, // target will be set by the MapContainer element
             layers,
             view: new View(viewOptions)
         });
 
         if (projectDescriptor?.extent) {
-            // hardcoded transform into Mercator. This assumes the basemap is in Mercator (like OSM)
-            // TODO adjust transform on the actual map projection
-            const mapExtent = transformExtent(projectDescriptor.extent, "EPSG:4326", "EPSG:3857");
-            map.getView().fit(mapExtent);
+            map.once("precompose", () => {
+                // hardcoded transform into Mercator. This assumes the basemap is in Mercator (like OSM)
+                // TODO adjust transform on the actual map projection
+                const mapExtent = transformExtent(projectDescriptor.extent!, "EPSG:4326", "EPSG:3857");
+                map.getView().fit(mapExtent);
+            })
         }
 
         // On click on the map, set the state selectedCell to the clicked cell on the map
@@ -364,7 +358,7 @@ export const MainPage = () => {
 
         return map;
     },
-    [mapDiv.current, viewOptions, imagesContainer] );
+    [viewOptions, imagesContainer] );
 
     // whenever the selectedCell changes, set it as the current feature in the selectedFeatures vector layer
     useEffect( () => {
@@ -454,7 +448,7 @@ export const MainPage = () => {
                 <SizeMeasurer>
                     {(props: {height: number, width: number} ) => (
                         <>
-                        <div style={{height: props.height+'px'}} ref={mapDiv}/>
+                        <MapContainer map={olmap} height={props.height} width={props.width}/>
                         <ReactControl map={olmap}>
                             <LayerList layersParent={olmap}/>
                         </ReactControl>

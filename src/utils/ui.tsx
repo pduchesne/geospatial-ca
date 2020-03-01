@@ -2,6 +2,7 @@ import Measure, { ContentRect, MeasuredComponentProps } from 'react-measure';
 import * as React from 'react';
 import {useState} from 'react';
 import {PromiseState} from "./hooks";
+import {memo} from "react";
 
 type SizeMeasurerProps = {
     children: (arg: { height: number; width: number }) => React.ReactNode;
@@ -16,7 +17,7 @@ type SizeMeasurerState = {
     width: number;
 };
 
-export const SizeMeasurer = ({ children, disableWidth, disableHeight, onResize }: SizeMeasurerProps) => {
+export const SizeMeasurer = memo(({ children, disableWidth, disableHeight, onResize }: SizeMeasurerProps) => {
     const [state, setState] = useState<SizeMeasurerState>({
         width: 10,
         height: 10
@@ -53,7 +54,7 @@ export const SizeMeasurer = ({ children, disableWidth, disableHeight, onResize }
             )}
         </Measure>
     );
-};
+});
 
 export function renderPromiseState<R>(
     state: PromiseState<R>,
@@ -78,18 +79,18 @@ export function renderPromiseState<R>(
     }
 }
 
-export const ErrorMessage = (props: {message: string}) => {
+export const ErrorMessage = memo((props: {message: string}) => {
     return <div className="error">${props.message}</div>
-}
+})
 
-export const Spinner = () => {
+export const Spinner = memo(() => {
     return <div className="lds-ellipsis">
         <div></div>
         <div></div>
         <div></div>
         <div></div>
     </div>
-}
+})
 
 /*
 export function VisualPromiseContainer<R>(props: {

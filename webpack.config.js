@@ -5,11 +5,15 @@ var webpack = require('webpack');
 
 var path = require('path');
 
+const APP_NAME = 'geospatial-ca';
+
 // this will create index.html file containing script
 // source in dist folder dynamically
 const htmlPlugin = new HtmlWebPackPlugin({
     template: './src/index.html',
-    filename: './index.html'
+    filename: './index.html',
+    inject: 'body',
+    chunks: [APP_NAME],
 });
 
 var localVariables;
@@ -31,11 +35,11 @@ module.exports = {
     optimization: { minimize: !dev },
 
     //specify the entry point for your project
-    entry: './src/index.tsx',
+    entry: { [APP_NAME] : [ './src/index.tsx' ] },
     // specify the output file name
     output: {
         path: path.resolve(__dirname, 'dist'),
-        filename: 'index.js',
+        filename: 'app/index.js',
         //publicPath: '/',
         libraryTarget: 'umd',
         umdNamedDefine: true
@@ -68,7 +72,11 @@ module.exports = {
             },
             { // required for monaco editor and font-awesome
                 test: /\.(jpe?g|png|gif|svg|json|ico|woff(2)?|ttf|eot)(\?v=\d+\.\d+\.\d+)?$/,
-                use: ["file-loader"]
+                loader: "file-loader",
+                options: {
+                    outputPath: 'assets/',
+                    name: '[name].[ext]'
+                }
             }
         ]
     },

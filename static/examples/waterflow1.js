@@ -6,7 +6,7 @@ const automata = new lib.waterflow.WaterflowAutomata2();
 // The more water, the less transparent
 const level2alpha = (level) => 1 - 1 / Math.pow(1 + level/5 , 2);
 
-/** @type lib.spatial.ProjectDescriptor */
+/** @type lib.spatial.ProjectDescriptor<[number, number], lib.spatial.TerrainCell> */
 const projectDescriptor = {
     description:
 `Example of a CA that models waterflow based on DEM data. 
@@ -55,7 +55,8 @@ const projectDescriptor = {
             (x, y, cell) => [0,0,255, level2alpha(cell[1])*255]
         ).getData(),
 
-    // (optional) render HTML for the selected cell. Resulting HTML is appended in the control panel.
+    // (optional) render HTML for the selected cell.
+    // When selecting a cell on the map, resulting HTML is appended in the control panel.
     renderHtml: lib.waterflow.renderHtml
 };
 

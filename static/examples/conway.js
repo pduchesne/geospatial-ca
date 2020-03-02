@@ -1,6 +1,6 @@
 
 
-/** @type lib.spatial.ProjectDescriptor */
+/** @type lib.spatial.ProjectDescriptor<[boolean], lib.spatial.TerrainCell> */
 const projectDescriptor = {
     description: 'Geospatial take on the classical Conway\'s Game of Life' ,
     data_layers: [
@@ -32,7 +32,8 @@ const projectDescriptor = {
         lib.model.iterateNeighbourhood(
             state, base, x, y, 1,
             (dx, dy, neighbourStateAndBase) => {
-                if ( (dx != 0 || dy != 0) && neighbourStateAndBase[0][0] ) {
+                const nb_state = neighbourStateAndBase[0];
+                if ( (dx != 0 || dy != 0) && nb_state[0] ) {
                     aliveNeighbours ++;
                 }
             });

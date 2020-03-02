@@ -1,6 +1,6 @@
 import * as ReactDOM from 'react-dom';
 import * as React from 'react';
-import { BrowserRouter, Route } from 'react-router-dom';
+import {HashRouter, Route} from 'react-router-dom';
 import { Map, View } from 'ol';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { Tab} from 'react-bootstrap';
@@ -62,7 +62,7 @@ const AppContext = React.createContext<{proxy_url?: string}>({
 
 export const App = () => (
     <AppContext.Provider value={ {proxy_url: "https://demo.highlatitud.es/proxy" } }>
-        <BrowserRouter>
+        <HashRouter>
             <div>
                 <Route
                     exact
@@ -70,7 +70,7 @@ export const App = () => (
                     render={props => <MainPage />}
                 />
             </div>
-        </BrowserRouter>
+        </HashRouter>
     </AppContext.Provider>
 )
 
@@ -157,7 +157,10 @@ export const MainPage = memo(() => {
 
     // memoized OL ImageSource that encapsulates the CA
     // recreated whenever the project descriptor changes
-    const caImageSource = useMemo( () => {
+    const caImageSource = useMemo(
+        () => {
+            setGifDataUrl(undefined);
+
             if (projectDescriptor) {
 
                 // define the constructor that will init the CA SpatialEnvironment from images and extent
@@ -524,10 +527,10 @@ export const MainPage = memo(() => {
                                             }
                                         </div>
                                         <div className="controls-action">
-                                        <button onClick={() => animateGIF(stepNb)}>
-                                            Create GIF
-                                        </button>
-                                            <img src={gifDataUrl} width="200" />
+                                            <button onClick={() => animateGIF(stepNb)}>
+                                                Create GIF
+                                            </button><br/>
+                                            {gifDataUrl && <img src={gifDataUrl} width="200" />}
                                         </div>
                                     </>
                                     }

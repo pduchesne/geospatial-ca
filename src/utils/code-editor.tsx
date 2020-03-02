@@ -41,10 +41,6 @@ export const CodeEditor = memo((props: {code: string, onCodeChange?: ChangeHandl
                 monaco.languages.typescript.javascriptDefaults.addExtraLib(libs[libName]+`;\nexport as namespace ${libName};`, `inmemory://model/${libName}.d.ts`);
             })
 
-        monaco.languages.typescript.javascriptDefaults.addExtraLib(
-            'export declare function add(a: number, b: number): number; export as namespace math;',
-            "inmemory://model/math.d.ts"
-        );
 
     };
 
@@ -52,7 +48,7 @@ export const CodeEditor = memo((props: {code: string, onCodeChange?: ChangeHandl
 
     const libNames = ["lib", "ca/model", "ca/spatial", "ca/waterflow", "spatial/utils"];
     useEffect( () => {
-            const promises = libNames.map(libName => fetch(libName+".d.ts").then(
+            const promises = libNames.map(libName => fetch(`types/${libName}.d.ts`).then(
                 (response) =>
                     response.text()
             ));

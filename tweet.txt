@@ -1,1 +1,1 @@
-Having fun bringing together cellular automata, @openlayers,  #opendata, typescript and react results in a water flow simulation model that runs in your browser, with your @opengeospatial data of choice. Here captured around #Liege, using @GeoportailWal data.
+Having fun bringing together cellular automata, @openlayers, #opendata, typescript and react results in a water flow simulation model that runs in your browser, with your @opengeospatial data of choice. Here captured around #Liege, using @GeoportailWal data.

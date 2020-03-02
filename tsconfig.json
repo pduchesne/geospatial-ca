@@ -1,6 +1,7 @@
 {
     "compilerOptions": {
-        "outDir": "dist", // path to compiled TS and definition files
+        "outDir": "dist/lib", // path to compiled TS and definition files
+        "declarationDir": "dist/types",
         "declaration": true, // required to include definition files in output
         "module": "commonjs",
         "target": "es5",

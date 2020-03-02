@@ -185,6 +185,18 @@ export class TerrainEnvironment extends SpatialEnvironment<Lattice2D<TerrainCell
     }
 }
 
+/*
+export function renderTerrainHtml(baseCell: TerrainCell) {
+    return <><table>
+        <tr><td>Alt</td><td>{baseCell.altitude}</td></tr>
+        <tr><td>Water</td><td>{stateCell[1]}</td></tr>
+        <tr><td>Dir</td><td>{stateCell[2].join(',')}</td></tr>
+    </table>
+        <MatrixDisplay matrix={stateCell[3]}/>
+    </>
+}
+ */
+
 export function renderHtml(stateCell: TerrainCellStatus, baseCell: TerrainCell) {
     return <><table>
         <tr><td>Alt</td><td>{baseCell.altitude}</td></tr>

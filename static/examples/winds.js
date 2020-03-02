@@ -2,7 +2,7 @@
 // The more water, the less transparent
 const level2alpha = (level) => 1 - 1 / Math.pow(1 + level / 5, 2);
 
-/** @type lib.spatial.ProjectDescriptor */
+/** @type lib.spatial.ProjectDescriptor<[number], [number, number]> */
 const projectDescriptor = {
 
     description: `Wind flow model, based on belgian Alaro weather model (https://data.gov.be/en/dataset/alaro).`,
@@ -42,15 +42,17 @@ const projectDescriptor = {
             // that will help track the wind
             new lib.model.BaseLattice2D(
                 size[0], size[1],
-                (x, y) => ([Math.random() > .95 ? 1 : 0]) // add random seeds
+                (x, y) => ([Math.random() > .99 ? 2 : 0]) // add random seeds
             ),
             // the base is a 2D lattice of 2-dim cells, containing the [x,y] wind vector
             new lib.model.BaseLattice2D(
                 size[0], size[1],
                 (x, y) => [
                     // each vector component is mapped from the luminance value of its respective raster
-                    2 * (lib.utils.rgbToHsl(windU.get(x, y))[2] - 0.5),
-                    2 * (lib.utils.rgbToHsl(windV.get(x, y))[2] - 0.5)].map(val => val == -1 ? 0 : val)
+                    // luminance belongs to [0,1], and must be mapped to a [-1,1] range
+                    2 * (lib.utils.rgbToHsl(windU.get(x, y))[2] - 0.5), //east-west vector
+                    2 * (lib.utils.rgbToHsl(windV.get(x, y))[2] - 0.5)  //north-south vector
+                ].map(val => val == -1 ? 0 : val)
             )
         ]
     },
@@ -59,12 +61,17 @@ const projectDescriptor = {
     // this function is called for each cell separately, and must generate a new cell state
     stepCellFn: (
         stateCell, baseCell, x, y, state, base) => {
+
+        // init the new state as a copy of the current one
         const newStateCell = [stateCell[0]];
+
+        // iterate over the cell neighbourhood at a distance of 1 (i.e. 8 neighbours)
         lib.model.iterateNeighbourhood(
             state, base, x, y, 1,
             (dx, dy, neighbourStateAndBase) => {
                 if (dx == 0 && dy == 0) {
-                    // first remove what's leaving the cell
+                    // this is the cell itself
+                    // remove the amount of particles leaving the cell
                     const delta = (Math.abs(baseCell[0]) + Math.abs(baseCell[1])) / 2 * stateCell[0];
                     newStateCell[0] -= delta;
                 } else if (dx == 0) {

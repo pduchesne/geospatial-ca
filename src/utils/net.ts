@@ -39,7 +39,11 @@ export class CancellablePromise<R> implements Promise<R> {
     }
 
     then<TResult1 = R, TResult2 = never>(onfulfilled?: ((value: R) => (PromiseLike<TResult1> | TResult1)) | undefined | null, onrejected?: ((reason: any) => (PromiseLike<TResult2> | TResult2)) | undefined | null): Promise<TResult1 | TResult2> {
-        return this.wrappedPromise.then<TResult1, TResult2>(onfulfilled, onrejected);
+        const then = this.wrappedPromise.then<TResult1, TResult2>(onfulfilled, onrejected);
+        if (then instanceof Promise)
+            return new CancellablePromise(then, this.controller);
+        else
+            return then;
     }
 
     finally(onfinally?: (() => void) | undefined | null): Promise<R> {

@@ -2,7 +2,10 @@
 // The more water, the less transparent
 const level2alpha = (level) => 1 - 1 / Math.pow(1 + level / 5, 2);
 
-/** @type lib.spatial.ProjectDescriptor<[number], [number, number]> */
+// precompute for performance sake
+const SIN135 = Math.sin(Math.PI * 135/180);
+
+/** @type lib.spatial.ProjectDescriptor<[number], [number, number, number, number]> */
 const projectDescriptor = {
 
     description: `Wind flow model, based on belgian Alaro weather model (https://data.gov.be/en/dataset/alaro).`,
@@ -44,15 +47,22 @@ const projectDescriptor = {
                 size[0], size[1],
                 (x, y) => ([Math.random() > .99 ? 2 : 0]) // add random seeds
             ),
-            // the base is a 2D lattice of 2-dim cells, containing the [x,y] wind vector
+            // the base is a 2D lattice of 4-dim cells, containing the [x,y,amplitude,angle] wind vector
+            // these redundant values are precomputed in the base lattice for performance sake
             new lib.model.BaseLattice2D(
                 size[0], size[1],
-                (x, y) => [
+                (x, y) => {
                     // each vector component is mapped from the luminance value of its respective raster
                     // luminance belongs to [0,1], and must be mapped to a [-1,1] range
-                    2 * (lib.utils.rgbToHsl(windU.get(x, y))[2] - 0.5), //east-west vector
-                    2 * (lib.utils.rgbToHsl(windV.get(x, y))[2] - 0.5)  //north-south vector
-                ].map(val => val == -1 ? 0 : val)
+                    var x = 2 * (lib.utils.rgbToHsl(windU.get(x, y))[2] - 0.5); //east-west vector
+                    var y = 2 * (lib.utils.rgbToHsl(windV.get(x, y))[2] - 0.5); //north-south vector
+                    x = x == -1 ? 0 : x; // minimal value actually means 0
+                    y = y == -1 ? 0 : y;
+
+                    var amplitude = Math.sqrt(Math.pow(x,2) + Math.pow(y,2));
+                    var angle_degrees = Math.atan2(y/amplitude, x/amplitude);
+                    return [x, y, amplitude, angle_degrees];
+                }
             )
         ]
     },

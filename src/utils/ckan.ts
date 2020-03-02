@@ -40,7 +40,8 @@ export type ResourceDict = {
     hash?: string,
     description?: string,
     format: string,
-    url: string,
+    url?: string,
+    access_url?: string,
     datastore_active: boolean,
     created: string,
     cache_last_updated?: string,
@@ -128,7 +129,7 @@ export class CkanClient {
 
     sendRequest(action: string, data?: any, requestType: 'GET' | 'POST' = 'GET'): Promise<any> {
 
-        let actionUrl = this.ckan_url + 'api/action/' + action;
+        let actionUrl = this.ckan_url + action;
 
         const options: RequestInit = {
             method: requestType
@@ -145,7 +146,7 @@ export class CkanClient {
 
         actionUrl = this.proxify_fn ? this.proxify_fn(new URL(actionUrl)).href : actionUrl;
 
-        return fetchParseError(actionUrl, options).then(
+        return fetchParseError(actionUrl, options, true).then(
             resp => {
             return resp.json().then( (jsonResp: CkanApiResponse) => {
                 if (jsonResp.success) {

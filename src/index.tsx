@@ -570,22 +570,32 @@ export const MainPage = memo(() => {
 
 export const CkanSearch = memo((props: {ckanUrl: string, searchStr?: string}) => {
 
+    const maxResults = 20;
+    const [page, setPage] = useState(0);
     const appCtx = useContext(AppContext);
 
     const ckanClient = useMemo(
         () => new CkanClient(props.ckanUrl, appCtx.proxy_url ? ((url: URL) => proxify_url(url, appCtx.proxy_url!)) : undefined ),
         [props.ckanUrl]);
 
-    const ckanResult$ = usePromiseFn(
-        () => ckanClient.package_search({fq: 'res_format:(WMS OR wms)', q:props.searchStr}).then(r => r.results),
-        [ckanClient, props.searchStr]);
+    // reset the page if search string changes
+    useEffect( () => setPage(0), [props.searchStr])
+
+    const ckanResponse$ = usePromiseFn(
+        () => ckanClient.package_search({fq: 'res_format:WMS', q:props.searchStr, start: page, rows: maxResults}),
+        [ckanClient, props.searchStr, page]);
 
     return <div>
         { renderPromiseState(
-            ckanResult$,
-            (results) => <div>
-                {results && results.map ( (r,idx) =>
-                    <div key={idx}><ResultLine package={r} resource={r.resources.find(r => r.format.toUpperCase() == 'WMS')}/></div>
+            ckanResponse$,
+            (response) => <div>
+                <div style={{fontSize: '80%'}}>
+                    {response.count} datasets found, showing {page} to {page+response.results.length}
+                    {page > 0 ? <a style={{margin: 4}} onClick={() => setPage(page+maxResults)}>[Prev]</a> : null}
+                    {response.count > page+response.results.length ? <a style={{margin: 4}} onClick={() => setPage(page+maxResults)}>[Next]</a> : null}
+                </div>
+                {response.results && response.results.map ( (r,idx) =>
+                    <div key={idx}><ResultLine package={r} resource={r.resources.find(r => r.format && r.format.toUpperCase() == 'WMS')}/></div>
                 )}
             </div>)
         }
@@ -601,8 +611,8 @@ export const ResultLine = memo((props: {resource?: ResourceDict, package: Packag
             <span style={{fontFamily: "monospace", fontSize: "80%"}}>[{props.resource?.format}]</span>
             {props.package.title || props.package.name}
         </div>
-        {showDetails && props.resource && (
-            <WMSLayers wms_url={props.resource.url} name_filter={props.package.title || props.package.name}/>
+        {showDetails && props.resource && (props.resource.url || props.resource.access_url) && (
+            <WMSLayers wms_url={ (props.resource.url || props.resource.access_url)! } name_filter={props.package.title || props.package.name}/>
         )}
     </div>
 })
@@ -636,28 +646,36 @@ export const WMSLayers = memo((props: {wms_url: string, name_filter?: string}) =
 
     return <div style={{marginLeft: 10}}>
         {renderPromiseState(capabilities$, capabilities => {
-            const availableLayers = capabilities.Capability.Layer.Layer || [];
-            let filteredLayers = availableLayers;
-            if (props.name_filter) {
-                const replacedFilter = props.name_filter.toLowerCase().replace(/[- ]/g,'_');
-                filteredLayers = filteredLayers.filter(l =>
-                    (l.Title && l.Title.toLowerCase().replace(/[- ]/g,'_') == replacedFilter) ||
-                    (l.Name && l.Name.toLowerCase().replace(/[- ]/g,'_') == replacedFilter));
-            }
+            try {
+                const availableLayers = capabilities.Capability.Layer.Layer || [];
+                let filteredLayers = availableLayers;
+                if (props.name_filter) {
+                    const replacedFilter = props.name_filter.toLowerCase().replace(/[- ]/g, '_');
+                    filteredLayers = filteredLayers.filter(l =>
+                        (l.Title && l.Title.toLowerCase().replace(/[- ]/g, '_') == replacedFilter) ||
+                        (l.Name && l.Name.toLowerCase().replace(/[- ]/g, '_') == replacedFilter));
+                }
 
-            return <>
-                {filteredLayers.map( l =>
-                    <div key={l.Name}><a href={strippedUrl.href+'#'+l.Name}>{l.Title || l.Name}</a></div>
-                )}
-                <div style={{fontSize: "80%"}}>
-                    <div>
-                        <span onClick={() => setShowAll(!showAll)}>All {availableLayers.length} layers</span> |
-                        <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
-                    </div>
-                    {showAll && availableLayers.map( l =>
-                        <div key={l.Name}><a href={strippedUrl.href+'#'+l.Name}>{l.Title || l.Name}</a></div>
+                return <>
+                    {filteredLayers.map(l =>
+                        <div key={l.Name}><a href={strippedUrl.href + '#' + l.Name}>{l.Title || l.Name}</a></div>
                     )}
-                </div></>
+                    <div style={{fontSize: "80%"}}>
+                        <div>
+                            <span onClick={() => setShowAll(!showAll)}>All {availableLayers.length} layers</span> |
+                            <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
+                        </div>
+                        {showAll && availableLayers.map(l =>
+                            <div key={l.Name}><a href={strippedUrl.href + '#' + l.Name}>{l.Title || l.Name}</a></div>
+                        )}
+                    </div>
+                </>
+            } catch (err) {
+                return <>
+                    <ErrorMessage message={err.toString()}/>
+                    <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
+                </>
+            }
         },
         error => <>
             <ErrorMessage message={error}/>
@@ -671,10 +689,10 @@ export const DataSearchPanel = memo(() => {
     const [searchStr, setSearchStr] = useState<string>();
 
     const ckan_urls = [
-        'https://opendata.vlaanderen.be',
-        'https://data.jrc.ec.europa.eu/',
-        'https://catalog.data.gov/'
-        //'https://www.europeandataportal.eu/data'
+        'https://www.europeandataportal.eu/data/search/ckan',
+        'https://data.jrc.ec.europa.eu/api/action',
+        //'https://opendata.vlaanderen.be/api/action',
+        'https://catalog.data.gov/api/action'
         //'https://data.europa.eu/euodp/data'
     ];
 

@@ -4,6 +4,9 @@ This is an attempt at a serverless, in-browser cellular automata tool running on
 It is also the excuse for experimenting with a blend of [Openlayers](http://openlayers.org), React, Typescript, and the massive amounts of
 open geospatial data available (only WMS is currently supported).
 
+## Demo
+This application is live on https://demo.highlatitud.es/spatial-ca
+
 ## Usage
 A cellular automata (CA) is described using a so-called ProjectDescriptor, editable in the `Code` tab. 
 This descriptor must contain the list of WMS layers that will be used to initialize the CA, and several functions:

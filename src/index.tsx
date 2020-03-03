@@ -601,7 +601,7 @@ This descriptor must contain the list of WMS layers that will be used to initial
 
 The CA raster inputs are displayed on the map in the \`Sources\` layer group.
 
-Sources available at https://github.com/pduchesne/spatial-ca .
+Sources available at https://github.com/pduchesne/geospatial-ca .
                                 `}
                                 </Markdown>
                             </Tab.Pane>

@@ -1,5 +1,5 @@
 {
-    "name": "cellular-automata",
+    "name": "geospatial-ca",
     "version": "1.0.0",
     "description": "",
     "main": "dist/bundle/index.js",

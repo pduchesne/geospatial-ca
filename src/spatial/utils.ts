@@ -30,7 +30,10 @@ export type WMSCapabilities_Layer = {
     "queryable": boolean,
     "opaque": boolean,
     "noSubsets": boolean
-    "Layer"?: WMSCapabilities_Layer[]
+    "Layer"?: WMSCapabilities_Layer[],
+    MaxScaleDenominator?: number,
+    MinScaleDenominator?: number,
+    AuthorityURL?: {OnlineResource?: string, name?: string}[]
 }
 
 export type ParsedWMSCapabilities = {
@@ -41,7 +44,7 @@ export type ParsedWMSCapabilities = {
         "Abstract"?: string,
         "KeywordList": string[],
         "OnlineResource": string,
-        "ContactInformation": {
+        "ContactInformation"?: {
             "ContactPersonPrimary"?: {"ContactPerson": string, "ContactOrganization": string},
             "ContactPosition"?: string,
             "ContactAddress"?: {
@@ -77,6 +80,7 @@ export type ParsedWMSCapabilities = {
 export type LayerDescriptor = {
     type?: string, //'WMS' | 'WFS' | 'WCS' | 'WMTS' | 'KML' | 'GeoJson',
     extent?: [number, number, number, number],
+    maxScale?: number,
     url: string,
     name?: string,
     title?: string,
@@ -101,8 +105,24 @@ export function descriptorFromString(url: string): LayerDescriptor {
 
     return {
         type: guessTypeFromUrl(service_url),
-        url: service_url,
+        url: stripOGCParams(service_url).href,
         name: layerName,
+        tiled: true
+    }
+}
+
+export function descriptorFromWMSCapabilities(url: string, layerCapas: WMSCapabilities_Layer, capas?: ParsedWMSCapabilities): LayerDescriptor {
+
+    return {
+        type: 'WMS',
+        url: stripOGCParams(url).href,
+        name: layerCapas.Name,
+        title: layerCapas.Title,
+        extent: layerCapas.EX_GeographicBoundingBox,
+        maxScale: layerCapas.MaxScaleDenominator,
+        attribution: layerCapas.AuthorityURL?.length ?
+            layerCapas.AuthorityURL[0].name :
+            capas?.Service.ContactInformation?.ContactPersonPrimary?.ContactOrganization,
         tiled: true
     }
 }
@@ -122,11 +142,13 @@ export function createLayerFromDescriptor(ld: LayerDescriptor) {
                 return new layer.Tile({
                     source: new TileWMS({
                         crossOrigin: 'Anonymous',
+
                         url: stripOGCParams(ld.url).href,
                         params: {'LAYERS': ld.name, 'TILED': true},
                         attributions: ld.attribution
                     }),
-                    title: ld.title || ld.name
+                    title: ld.title || ld.name,
+                    descriptor: ld
                 } as TileOptions )
             } else {
                 return new ImageLayer({
@@ -136,7 +158,8 @@ export function createLayerFromDescriptor(ld: LayerDescriptor) {
                         params: {'LAYERS': ld.name},
                         attributions: ld.attribution
                     }),
-                    title: ld.title || ld.name
+                    title: ld.title || ld.name,
+                    descriptor: ld
                 } as ImageOptions)
             }
         default:

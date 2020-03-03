@@ -1,8 +1,27 @@
+.absolute-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
 .mainApp {
     display: flex;
     position: absolute;
     width: 100%;
     height: 100%;
+
+    .action {
+        color: #3b87d9;
+
+        &:hover {
+            filter: saturate(10);
+            &a {
+                text-decoration: underline;
+            }
+        }
+    }
 
     .error {
         padding: 2px;
@@ -36,6 +55,25 @@
             >button {
                 width: 7em;
                 margin-right: 5px;
+            }
+        }
+
+        .data-search {
+            display: flex;
+            flex-direction: column;
+
+            .ckan-search {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+
+                .results-header {
+                    font-size: 80%;
+                }
+
+                .results {
+                    overflow: auto
+                }
             }
         }
     }
@@ -87,6 +125,7 @@
 
 .ol-attribution li {
     display: block;
+    text-align: left;
 }
 
 .ol-layer-list {

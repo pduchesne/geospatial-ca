@@ -12,7 +12,7 @@ import * as raster from 'ol/source/Raster';
 //import ImageStatic from 'ol/source/ImageStatic';
 import * as layer from 'ol/layer';
 import { ViewOptions } from 'ol/View';
-import {ReactControl, LayerList, MapContainer} from "./spatial/ol-helpers";
+import {ReactControl, LayerList, MapContainer, getResolutionFromScale} from "./spatial/ol-helpers";
 import Polygon from "ol/geom/Polygon";
 import VectorSource from "ol/source/Vector";
 import Feature from "ol/Feature";
@@ -38,15 +38,15 @@ import '@fortawesome/fontawesome-free/scss/regular.scss';
 import '@fortawesome/fontawesome-free/scss/brands.scss';
 import '@fortawesome/fontawesome-free/scss/fontawesome.scss';
 import {transformExtent} from "ol/proj";
-import {CkanClient, PackageDict, ResourceDict} from "./utils/ckan";
+import {CkanClient, PackageDict, PackageSearchRequest, PackageSearchResponse, ResourceDict} from "./utils/ckan";
 import WMSCapabilities from "ol/format/WMSCapabilities";
 import {cancelableFetch, fetchParseError, proxify_url} from "./utils/net";
 import {usePromiseFn} from 'utils/hooks';
 import {
     createLayerFromDescriptor,
-    descriptorFromString, LayerDescriptor,
+    descriptorFromString, descriptorFromWMSCapabilities, LayerDescriptor,
     ParsedWMSCapabilities,
-    stripOGCParams
+    stripOGCParams, WMSCapabilities_Layer
 } from "./spatial/utils";
 import LayerGroup from "ol/layer/Group";
 import {Options as GroupOptions} from "ol/layer/Group";
@@ -54,6 +54,7 @@ import BaseLayer from "ol/layer/Base";
 import Attribution from "ol/control/Attribution";
 import {mapInto} from "./ca/model";
 import Markdown from 'markdown-to-jsx';
+import {DebounceInput} from "react-debounce-input";
 
 
 const AppContext = React.createContext<{proxy_url?: string}>({
@@ -109,7 +110,7 @@ const CodeEvalButton = memo((props: {status: CodeStatus, evalFn: () => void} & R
 
     switch (status) {
         case CodeStatus.DIRTY:
-            return <i className={"fas fa-play"} onClick={evalFn} {...rest}></i>
+            return <i className={"fas fa-play action"} onClick={evalFn} {...rest} style={{...rest.style, color: '#427bff'}}></i>
         case CodeStatus.OK:
             return <i className={"fas fa-check"} {...rest} style={{...rest.style, color: 'green'}}></i>
         case CodeStatus.ERROR:
@@ -404,6 +405,9 @@ export const MainPage = memo(() => {
                     scriptName && evalCode(code); // do not evaluate automatically the empty code template
                 });
             }
+        ).catch(reason => {
+            console.log("Failed to load example script : "+reason.toString())
+        }
         ),
         [scriptName]);
 
@@ -457,6 +461,16 @@ export const MainPage = memo(() => {
         );
     }
 
+    const previewLayer = (url: string, name: string, layerCapas?: WMSCapabilities_Layer, capas?: ParsedWMSCapabilities) => {
+        if (olmap) {
+            const layerDescriptor = layerCapas ?
+                descriptorFromWMSCapabilities(url, layerCapas, capas) :
+                descriptorFromString(url + "#" + name);
+            const layer = createLayerFromDescriptor(layerDescriptor);
+            olmap.addLayer(layer);
+        }
+    }
+
     return <div className='mainApp'>
             <div className='mapPanel' style={{flex: 2.5}}>
                 <SizeMeasurer>
@@ -464,14 +478,18 @@ export const MainPage = memo(() => {
                         <>
                         <MapContainer map={olmap} height={props.height} width={props.width}/>
                         <ReactControl map={olmap}>
-                            <LayerList layersParent={olmap}/>
+                            <LayerList layersParent={olmap}
+                                       onFitToExtent={(extent, scale) => {
+                                           olmap.getView().fit(transformExtent(extent, "EPSG:4326", "EPSG:3857"));
+                                           scale && olmap.getView().setResolution(getResolutionFromScale(olmap, scale));
+                                       }}/>
                         </ReactControl>
                         </>
                     )}
 
                 </SizeMeasurer>
             </div>
-            <div className='controlsPanel' style={{flex: activeTab=='controls'?1.5:5}}>
+            <div className='controlsPanel' style={{flex: activeTab=='controls'?1.5:5, maxWidth: '66%'}}>
                 <div style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
                     <Tab.Container activeKey={activeTab} defaultActiveKey="controls" id="menu">
                         <Nav variant={"tabs"} onSelect={(eventKey: string) => setActiveTab(eventKey)}>
@@ -498,7 +516,7 @@ export const MainPage = memo(() => {
                                 </Nav.Link>
                             </Nav.Item>
                         </Nav>
-                        <Tab.Content>
+                        <Tab.Content style={{position: "relative"}}>
                             <Tab.Pane eventKey="controls">
                                 <div className="controls-actions">
                                     {projectDescriptor?.description &&
@@ -559,7 +577,9 @@ export const MainPage = memo(() => {
                                 </SizeMeasurer>
                             </Tab.Pane>
                             <Tab.Pane eventKey="datasearch">
-                                <DataSearchPanel/>
+                                <DataSearchPanel onLayerClick={
+                                    (url, name, layerCapas, capas) =>
+                                        previewLayer(url, name, layerCapas, capas)}/>
                             </Tab.Pane>
                         </Tab.Content>
                     </Tab.Container>
@@ -568,41 +588,93 @@ export const MainPage = memo(() => {
         </div>
 })
 
-export const CkanSearch = memo((props: {ckanUrl: string, searchStr?: string}) => {
+
+export const DataSearchPanel = memo((props: {onLayerClick?: (url: string, name: string, layerCapas?: WMSCapabilities_Layer, capas?: ParsedWMSCapabilities) => void}) => {
+
+    const [searchStr, setSearchStr] = useState<string>();
+
+    const ckan_urls = [
+        'https://www.europeandataportal.eu/data/search/ckan',
+        'https://data.jrc.ec.europa.eu/api/action',
+        //'https://opendata.vlaanderen.be/api/action',
+        'https://catalog.data.gov/api/action'
+        //'https://data.europa.eu/euodp/data'
+    ];
+
+    const [selectedUrl, setSelectedUrl] = useState<string>(ckan_urls[0]);
+
+    return <div className="data-search absolute-fill" >
+        <div>
+            <select value={selectedUrl} onChange={e => setSelectedUrl(e.target.value)}>
+                {ckan_urls.map( (url, idx) => <option key={idx} value={url}>{new URL(url).hostname}</option> )}
+            </select>
+            <DebounceInput
+                minLength={2}
+                debounceTimeout={300}
+                onChange={(e) => setSearchStr(e.target.value)} />
+        </div>
+
+        <CkanSearch ckanUrl={selectedUrl} searchStr={searchStr} onLayerClick={props.onLayerClick}/>
+    </div>
+})
+
+export const CkanSearch = memo((props: {ckanUrl: string, searchStr?: string, onLayerClick?: (url: string, name: string, layerCapas?: WMSCapabilities_Layer, capas?: ParsedWMSCapabilities) => void}) => {
 
     const maxResults = 20;
-    const [page, setPage] = useState(0);
+
+    const [currentQuery, setCurrentQuery] = useState<PackageSearchRequest & {start: number}>(
+        {fq: 'res_format:WMS', q:props.searchStr, start: 0, rows: maxResults});
+    const [currentResult, setCurrentResult] = useState<PackageSearchResponse>();
     const appCtx = useContext(AppContext);
+
+    const setPage = (start: number) => setCurrentQuery({...currentQuery, start: Math.max(0,start)});
+
 
     const ckanClient = useMemo(
         () => new CkanClient(props.ckanUrl, appCtx.proxy_url ? ((url: URL) => proxify_url(url, appCtx.proxy_url!)) : undefined ),
         [props.ckanUrl]);
 
-    // reset the page if search string changes
-    useEffect( () => setPage(0), [props.searchStr])
-
     const ckanResponse$ = usePromiseFn(
-        () => ckanClient.package_search({fq: 'res_format:WMS', q:props.searchStr, start: page, rows: maxResults}),
-        [ckanClient, props.searchStr, page]);
+        () => ckanClient.package_search(currentQuery)
+            .then(value => {
+                setCurrentResult(value);
+                return value;
+            }),
+        [currentQuery]);
 
-    return <div>
+    // reset the page if search string or url changes
+    useEffect( () => {
+        setCurrentResult(undefined);
+        setCurrentQuery({...currentQuery, q:props.searchStr, start: 0});
+    }, [ckanClient, props.searchStr]);
+
+    return <div className="ckan-search">
+        { currentResult ?
+            <div className="results-header">
+                {currentResult.count} datasets found, showing {currentQuery.start} to {currentQuery.start+currentResult.results.length}
+                {currentQuery.start > 0 ? <a className="action" style={{margin: 4}} onClick={() => setPage(currentQuery.start-maxResults)}>[Prev]</a> : null}
+                {currentResult.count > currentQuery.start+currentResult.results.length ? <a className="action" style={{margin: 4}} onClick={() => setPage(currentQuery.start+maxResults)}>[Next]</a> : null}
+            </div> : undefined
+        }
         { renderPromiseState(
             ckanResponse$,
-            (response) => <div>
-                <div style={{fontSize: '80%'}}>
-                    {response.count} datasets found, showing {page} to {page+response.results.length}
-                    {page > 0 ? <a style={{margin: 4}} onClick={() => setPage(page+maxResults)}>[Prev]</a> : null}
-                    {response.count > page+response.results.length ? <a style={{margin: 4}} onClick={() => setPage(page+maxResults)}>[Next]</a> : null}
-                </div>
+            (response) => <div style={{flex: 1, position: "relative"}}>
+                <div className="results absolute-fill">
                 {response.results && response.results.map ( (r,idx) =>
-                    <div key={idx}><ResultLine package={r} resource={r.resources.find(r => r.format && r.format.toUpperCase() == 'WMS')}/></div>
+                    <div key={idx}>
+                        <ResultLine package={r}
+                                    resource={r.resources.find(r => r.format && r.format.toUpperCase() == 'WMS')}
+                                    onLayerClick={props.onLayerClick}
+                        />
+                    </div>
                 )}
+                </div>
             </div>)
         }
     </div>
 })
 
-export const ResultLine = memo((props: {resource?: ResourceDict, package: PackageDict}) => {
+export const ResultLine = memo((props: {resource?: ResourceDict, package: PackageDict, onLayerClick?: (url: string, name: string, layerCapas?: WMSCapabilities_Layer, capas?: ParsedWMSCapabilities) => void}) => {
 
     const [showDetails, setShowDetails] = useState<boolean>();
 
@@ -612,13 +684,16 @@ export const ResultLine = memo((props: {resource?: ResourceDict, package: Packag
             {props.package.title || props.package.name}
         </div>
         {showDetails && props.resource && (props.resource.url || props.resource.access_url) && (
-            <WMSLayers wms_url={ (props.resource.url || props.resource.access_url)! } name_filter={props.package.title || props.package.name}/>
+            <WMSLayers wms_url={ (props.resource.url || props.resource.access_url)! }
+                       name_filter={props.package.title || props.package.name}
+                       onLayerClick={props.onLayerClick}
+            />
         )}
     </div>
 })
 
 
-export const WMSLayers = memo((props: {wms_url: string, name_filter?: string}) => {
+export const WMSLayers = memo((props: {wms_url: string, name_filter?: string, onLayerClick?: (url: string, name: string, layerCapas?: WMSCapabilities_Layer, capas?: ParsedWMSCapabilities) => void}) => {
 
     const appCtx = useContext(AppContext);
     const [showAll, setShowAll] = useState<boolean>(false);
@@ -666,7 +741,18 @@ export const WMSLayers = memo((props: {wms_url: string, name_filter?: string}) =
                             <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
                         </div>
                         {showAll && availableLayers.map(l =>
-                            <div key={l.Name}><a href={strippedUrl.href + '#' + l.Name}>{l.Title || l.Name}</a></div>
+                            <div key={l.Name}>
+                                {l.Name != undefined ?
+                                    <a href={strippedUrl.href + '#' + l.Name}
+                                       onClick={ (e) => {
+                                           e.preventDefault();
+                                           props.onLayerClick && props.onLayerClick(strippedUrl.href, l.Name!, l, capabilities);
+                                           return false;} }>
+                                        {l.Title || l.Name}
+                                    </a> :
+                                    <span>{l.Title} (Undefined name)</span>
+                                }
+                            </div>
                         )}
                     </div>
                 </>
@@ -681,29 +767,6 @@ export const WMSLayers = memo((props: {wms_url: string, name_filter?: string}) =
             <ErrorMessage message={error}/>
             <a href={capabilitiesUrl?.href} target="NEW">Capabilities</a>
         </>) }
-    </div>
-})
-
-export const DataSearchPanel = memo(() => {
-
-    const [searchStr, setSearchStr] = useState<string>();
-
-    const ckan_urls = [
-        'https://www.europeandataportal.eu/data/search/ckan',
-        'https://data.jrc.ec.europa.eu/api/action',
-        //'https://opendata.vlaanderen.be/api/action',
-        'https://catalog.data.gov/api/action'
-        //'https://data.europa.eu/euodp/data'
-    ];
-
-    const [selectedUrl, setSelectedUrl] = useState<string>(ckan_urls[0]);
-
-    return <div>
-        <select value={selectedUrl} onChange={e => setSelectedUrl(e.target.value)}>
-            {ckan_urls.map( (url, idx) => <option key={idx} value={url}>{new URL(url).hostname}</option> )}
-        </select>
-        <input value={searchStr} onChange={(e) => setSearchStr(e.target.value)} />
-        <CkanSearch ckanUrl={selectedUrl} searchStr={searchStr}/>
     </div>
 })
 

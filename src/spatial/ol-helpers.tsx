@@ -7,6 +7,12 @@ import {useState} from "react";
 import BaseLayer from "ol/layer/Base";
 import LayerGroup from "ol/layer/Group";
 import {ObjectEvent} from "ol/Object";
+import Collection from "ol/Collection";
+import {Extent} from "ol/extent";
+import {METERS_PER_UNIT} from "ol/proj/Units";
+import { LayerDescriptor } from "./utils";
+import TileLayer from "ol/layer/Tile";
+import {TileSourceEvent} from "ol/source/Tile";
 
 export const MapContainer = memo((props: {map: Map, width?: number, height?: number}) => {
     // div container that will hold the OL map
@@ -63,7 +69,15 @@ export const ReactControl = memo((props: {map: Map, children: React.ReactNode}) 
     }
 })
 
-export const LayerList = memo((props: {layersParent: Map | LayerGroup}) => {
+export function getResolutionFromScale(map: Map, scale: number){
+    const units = map.getView().getProjection().getUnits();
+    const dpi = 25.4 / 0.28;
+    const mpu = METERS_PER_UNIT[units];
+    const resolution = scale/(mpu * 39.37 * dpi);
+    return resolution;
+}
+
+export const LayerList = memo((props: {layersParent: Map | LayerGroup, onFitToExtent?: (extent: Extent, scale?: number) => void}) => {
 
     const {layersParent} = props;
 
@@ -71,11 +85,14 @@ export const LayerList = memo((props: {layersParent: Map | LayerGroup}) => {
 
     useEffect( () => {
         if (layersParent) {
-            const listener = (evt:ObjectEvent) => { setLayers((evt.target as Map).getLayers().getArray()) }
-            layersParent.on("change", listener);
-            setLayers(layersParent.getLayers().getArray());
+            const listener = (evt:ObjectEvent) => {
+                const layers = (evt.target as (Collection<BaseLayer>)).getArray();
+                setLayers([...layers])
+            };
+            layersParent.getLayers().on("propertychange", listener);
+            setLayers([...layersParent.getLayers().getArray()]);
 
-            return () => layersParent.un("change", listener);
+            return () => layersParent.getLayers().un("change", listener);
         } else {
             return undefined;
         }
@@ -85,17 +102,18 @@ export const LayerList = memo((props: {layersParent: Map | LayerGroup}) => {
     return <div className='ol-layer-list'>
         {  layers
             .filter(l => l.get('title') != undefined)
-            .map( (layer, idx) => <LayerListItem layer={layer} key={idx}/>)
+            .map( (layer, idx) => <LayerListItem layer={layer} key={idx} onFitToExtent={props.onFitToExtent}/>)
         }
     </div>
 
 })
 
-export const LayerListItem = memo((props: {layer: BaseLayer}) => {
+export const LayerListItem = memo((props: {layer: BaseLayer, onFitToExtent?: (extent: Extent, scale?: number) => void}) => {
     const {layer} = props;
 
     const [visible, setVisible] = useState(layer.getVisible());
     const [collapsed, setCollapsed] = useState(true);
+    const [error, setError] = useState();
 
     useEffect( () => {
         if (layer) {
@@ -105,13 +123,25 @@ export const LayerListItem = memo((props: {layer: BaseLayer}) => {
             }
             layer.on("change:visible", listener);
 
+            const errorListener = (evt: TileSourceEvent) => {
+                setError(evt)
+            }
+            layer.on("error", errorListener);
+            if (layer instanceof TileLayer)
+                layer.getSource().on("tileloaderror", errorListener);
+
             return () => {
-                layer.un("change:visible", listener)
+                layer.un("change:visible", listener);
+                layer.un("error", errorListener);
+                if (layer instanceof TileLayer)
+                    layer.getSource().un("tileloaderror", errorListener);
             }
         } else {
             return undefined;
         }
     }, [layer]);
+
+    const descriptor = layer.get('descriptor') as LayerDescriptor;
 
     return <div className='ol-layer-list-item'>
         <div style={{marginLeft: 12}}>
@@ -126,6 +156,18 @@ export const LayerListItem = memo((props: {layer: BaseLayer}) => {
                     layer.setVisible(e.target.checked)
                 } />
             </span>
+
+            {error &&
+            <i className="fas fa-exclamation-triangle" style={{float: 'right', fontSize: '80%', margin: '2px', color: '#c34412'}}/>
+            }
+
+            {descriptor && descriptor.extent &&
+            <i className="action fas fa-expand"
+               style={{float: 'right', fontSize: '80%', margin: '2px'}}
+               onClick={() => {
+                   props.onFitToExtent && descriptor.extent && props.onFitToExtent(descriptor.extent, descriptor.maxScale)
+               }}/>
+            }
             </div>
             {layer instanceof LayerGroup && !collapsed ?
                 <div style={{marginLeft: 5}}> <LayerList layersParent={layer}/>  </div> :

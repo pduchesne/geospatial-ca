@@ -17,8 +17,8 @@ const projectDescriptor = {
     data_layers: [
         // This WMS provides DEM data as a blue to red gradient
         'https://geoservices.wallonie.be/arcgis/services/RELIEF/WALLONIE_MNT_2013_2014/MapServer/WMSServer#0',
-        'https://image.discomap.eea.europa.eu/arcgis/services/Corine/CLC2018_WM/MapServer/WMSServer#2',
-        'https://image.discomap.eea.europa.eu/arcgis/services/GioLandPublic/ESM2012_Release2017_UAColours_WM/MapServer/WMSServer#1'
+        //'https://image.discomap.eea.europa.eu/arcgis/services/Corine/CLC2018_WM/MapServer/WMSServer#2',
+        //'https://image.discomap.eea.europa.eu/arcgis/services/GioLandPublic/ESM2012_Release2017_UAColours_WM/MapServer/WMSServer#1'
     ],
 
     // Default extent

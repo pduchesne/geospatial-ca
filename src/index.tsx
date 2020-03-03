@@ -400,6 +400,7 @@ export const MainPage = memo(() => {
     usePromiseFn(() =>
         cancelableFetch("examples/" + (scriptName || 'blank') + ".js").then(
             (value) => {
+                setProjectDescriptor(undefined);
                 value.text().then(code => {
                     setCode(code);
                     scriptName && evalCode(code); // do not evaluate automatically the empty code template
@@ -545,9 +546,7 @@ export const MainPage = memo(() => {
                                             }
                                         </div>
                                         <div className="controls-action">
-                                            <button onClick={() => animateGIF(stepNb)}>
-                                                Create GIF
-                                            </button><br/>
+                                            <CreateGifAction animate={(frameNb, stepsPerFrame) => animateGIF(frameNb, stepsPerFrame)}/><br/>
                                             {gifDataUrl && <img src={gifDataUrl} width="200" />}
                                         </div>
                                     </>
@@ -588,6 +587,20 @@ export const MainPage = memo(() => {
         </div>
 })
 
+
+export const CreateGifAction = memo ( (props: {animate: (frameNb: number, stepsPerFrame:number) => void}) => {
+
+    const [params, setParams] = useState({frameNb: 10, stepsPerFrame:1});
+
+    return <>
+        <button onClick={() => props.animate(params.frameNb, params.stepsPerFrame)}>
+            Create GIF
+        </button>
+        Frame Nb:<input type="number" style={{width: '3em', marginRight: '5px'}} value={params.frameNb} placeholder="Frame Nb" onChange={e => setParams({...params, frameNb: e.target.valueAsNumber})} />
+        Steps/Frame:<input type="number" style={{width: '3em', marginRight: '5px'}} value={params.stepsPerFrame} placeholder="Steps/Frame" onChange={e => setParams({...params, stepsPerFrame: e.target.valueAsNumber})} />
+        </>
+    }
+)
 
 export const DataSearchPanel = memo((props: {onLayerClick?: (url: string, name: string, layerCapas?: WMSCapabilities_Layer, capas?: ParsedWMSCapabilities) => void}) => {
 

@@ -6,6 +6,8 @@
 const projectDescriptor = {
 
 
+    description: `This is a blank project. Add your code in the Code panel.`,
+
     /**
      * a set of geospatial layers (currently only WMS) that will be used to init the cellular automata
      * each layer can be of the form <wms_url>#<layer_name>, or a {@link spatial.LayerDescriptor} instance describing the resource
@@ -17,7 +19,7 @@ const projectDescriptor = {
     extent: [-180, -90, 180, 90],
 
     // the CA step function that generates a new state form the previous state
-    stepFn: (previousState, base) => /* generate new state */ ,
+    stepFn: (previousState, base) => undefined /* TODO generate new state */ ,
 
     // Initialize the CA lattices
     init: (images, size) => [
@@ -28,7 +30,7 @@ const projectDescriptor = {
     ],
 
     // function that renders the CA state into a canvas image
-    renderFn: (state, base) => /* do the rendering */
+    renderFn: (state, base) => undefined /* TODO do the rendering */
 };
 
 return projectDescriptor;

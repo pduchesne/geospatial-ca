@@ -7,8 +7,7 @@ const projectDescriptor = {
         // European-wide DEM
         'https://image.discomap.eea.europa.eu/arcgis/services/Elevation/EUElev_DEM_V11/MapServer/WMSServer#DEM_v11_Masked2',
         // land use
-        'https://image.discomap.eea.europa.eu/arcgis/services/GioLandPublic/ESM2012_Release2017_UAColours_WM/MapServer/WMSServer#1',
-        //'https://image.discomap.eea.europa.eu/arcgis/services/GioLandPublic/Lucas2012/MapServer/WMSServer#Lucas%20Coverage%202012'
+        'https://image.discomap.eea.europa.eu/arcgis/services/GioLandPublic/ESM2012_Release2017_UAColours_WM/MapServer/WMSServer#1'
     ],
     extent: [5,50,6,51], // lon/lat extent
 

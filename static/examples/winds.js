@@ -54,14 +54,14 @@ const projectDescriptor = {
                 (x, y) => {
                     // each vector component is mapped from the luminance value of its respective raster
                     // luminance belongs to [0,1], and must be mapped to a [-1,1] range
-                    var x = 2 * (lib.utils.rgbToHsl(windU.get(x, y))[2] - 0.5); //east-west vector
-                    var y = 2 * (lib.utils.rgbToHsl(windV.get(x, y))[2] - 0.5); //north-south vector
-                    x = x == -1 ? 0 : x; // minimal value actually means 0
-                    y = y == -1 ? 0 : y;
+                    let wind_x = 2 * (lib.utils.rgbToHsl(windU.get(x, y))[2] - 0.5); //east-west vector
+                    let wind_y = 2 * (lib.utils.rgbToHsl(windV.get(x, y))[2] - 0.5); //north-south vector
+                    wind_x = wind_x == -1 ? 0 : wind_x; // minimal value actually means 0
+                    wind_y = wind_y == -1 ? 0 : wind_y;
 
-                    var amplitude = Math.sqrt(Math.pow(x,2) + Math.pow(y,2));
-                    var angle_degrees = Math.atan2(y/amplitude, x/amplitude);
-                    return [x, y, amplitude, angle_degrees];
+                    var amplitude = Math.sqrt(Math.pow(wind_x,2) + Math.pow(wind_y,2));
+                    var angle_degrees = Math.atan2(wind_y/amplitude, wind_x/amplitude);
+                    return [wind_x, wind_y, amplitude, angle_degrees];
                 }
             )
         ]

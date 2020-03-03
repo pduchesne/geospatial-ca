@@ -490,7 +490,7 @@ export const MainPage = memo(() => {
 
                 </SizeMeasurer>
             </div>
-            <div className='controlsPanel' style={{flex: activeTab=='controls'?1.5:5, maxWidth: '66%'}}>
+            <div className='controlsPanel' style={{flex: (activeTab=='controls' || activeTab=='about')?1.5:5, maxWidth: '66%'}}>
                 <div style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
                     <Tab.Container activeKey={activeTab} defaultActiveKey="controls" id="menu">
                         <Nav variant={"tabs"} onSelect={(eventKey: string) => setActiveTab(eventKey)}>
@@ -502,6 +502,12 @@ export const MainPage = memo(() => {
                                 <option>waterflow1</option>
                                 <option>winds</option>
                             </select>
+
+                            <Nav.Item>
+                                <Nav.Link eventKey="about">
+                                    <i className="fas fa-question-circle"></i>
+                                </Nav.Link>
+                            </Nav.Item>
                             <Nav.Item>
                                 <Nav.Link eventKey="controls">Controls</Nav.Link>
                             </Nav.Item>
@@ -580,6 +586,25 @@ export const MainPage = memo(() => {
                                     (url, name, layerCapas, capas) =>
                                         previewLayer(url, name, layerCapas, capas)}/>
                             </Tab.Pane>
+                            <Tab.Pane eventKey="about">
+                                <Markdown className="absolute-fill">{` 
+This is an attempt at a serverless, in-browser cellular automata tool running on geospatial data.
+It is also the excuse for experimenting with a blend of [Openlayers](http://openlayers.org), React, Typescript, and the massive amounts of
+open geospatial data available (only WMS is currently supported).
+
+A cellular automata (CA) is described using a so-called ProjectDescriptor, editable in the \`Code\` tab. 
+This descriptor must contain the list of WMS layers that will be used to initialize the CA, and several functions:
+
+  * \`init\` : intializes the CA from the provided raster data 
+  * \`stepFn\` : performs one step of the CA
+  * \`renderFn\` : renders the CA state into a displayable raster   
+
+The CA raster inputs are displayed on the map in the \`Sources\` layer group.
+
+Sources available at https://github.com/pduchesne/spatial-ca .
+                                `}
+                                </Markdown>
+                            </Tab.Pane>
                         </Tab.Content>
                     </Tab.Container>
                 </div>
@@ -623,7 +648,9 @@ export const DataSearchPanel = memo((props: {onLayerClick?: (url: string, name: 
             </select>
             <DebounceInput
                 minLength={2}
+                placeholder="Search terms"
                 debounceTimeout={300}
+                style={{marginLeft: '5px'}}
                 onChange={(e) => setSearchStr(e.target.value)} />
         </div>
 

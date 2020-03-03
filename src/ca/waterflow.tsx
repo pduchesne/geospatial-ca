@@ -86,7 +86,7 @@ export class WaterflowAutomata2 implements Automata<Lattice2D<TerrainCellStatus>
 
         // cumulativeVolume must be the sum of all transferVolumes
         let cumulativeVolume = 0;
-        const transferVolumes = thisCellNewState[3] ? thisCellNewState[3] : thisCellNewState[3] = [[0,0,0], [0, 0, 0], [0, 0, 0]];
+        const transferVolumes = thisCellNewState[3] ? [...thisCellNewState[3]] : thisCellNewState[3] = [[0,0,0], [0, 0, 0], [0, 0, 0]];
         transferVolumes[1][1] = currentWaterLevel;
 
         for (let dy=-1;dy<=1;dy++) {
@@ -108,7 +108,7 @@ export class WaterflowAutomata2 implements Automata<Lattice2D<TerrainCellStatus>
 
                     if (heightDiff > 0) {
                         // volumeTransfer must be <= currentWaterLevel
-                        let volumeTransfer = Math.min(currentWaterLevel, heightDiff / 2);
+                        let volumeTransfer = Math.min(currentWaterLevel, heightDiff );
 
                         if (dx == dy) volumeTransfer = volumeTransfer / 1.41; // diagonal moves should be adjusted to have uniform volume per meter
                         transferVolumes[dy+1][dx+1] = volumeTransfer;

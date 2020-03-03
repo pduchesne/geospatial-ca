@@ -338,7 +338,7 @@ export async function animate(
                     mapLayersDiv as HTMLElement,
                     {backgroundColor: null, scale: 0.5})
             ).then(canvas => {
-                gif.addFrame(canvas, {delay: 100});
+                gif.addFrame(canvas, {delay: 250});
             })
         }
 
